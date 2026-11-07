@@ -193,42 +193,79 @@ export default function App() {
     refreshClientGps(false);
   }, []);
 
-  // Load real artisans from Supabase
+  // Load real artisans and reviews from Supabase
   const loadArtisansFromSupabase = async () => {
     if (!supabase) return;
     try {
-      const { data, error } = await supabase.from('artisans').select('*');
-      if (!error && Array.isArray(data)) {
+      const [artisansRes, reviewsRes] = await Promise.all([
+        supabase.from('artisans').select('*'),
+        supabase.from('reviews').select('*').order('created_at', { ascending: false }),
+      ]);
+
+      const artisansData = artisansRes.data;
+      const reviewsData = reviewsRes.data;
+
+      if (!artisansRes.error && Array.isArray(artisansData)) {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const mapped: Artisan[] = data.map((item: any) => ({
-          id: String(item.id),
-          name: item.name || item.full_name || 'Artisan',
-          phone: item.phone || item.tel || '',
-          whatsapp: item.whatsapp || item.phone?.replace(/\D/g, '') || '',
-          trade: item.trade || item.metier || 'Artisan',
-          customTradeName: item.customTradeName || item.custom_trade_name,
-          additionalTrades: item.additionalTrades || item.additional_trades || [],
-          addressDetail: item.addressDetail || item.address_detail || item.address || 'Atelier',
-          lat: item.lat !== null && item.lat !== undefined ? Number(item.lat) : null,
-          lng: item.lng !== null && item.lng !== undefined ? Number(item.lng) : null,
-          avatar: item.avatar || item.avatar_url || 'https://images.unsplash.com/photo-1540555700478-4be289fbecef?auto=format&fit=crop&w=400&q=80',
-          coverImage: item.coverImage || item.cover_image || 'https://images.unsplash.com/photo-1581092160607-ee22621dd758?auto=format&fit=crop&w=1200&q=80',
-          workPhotos: item.workPhotos || item.work_photos || [],
-          isOnline: item.isOnline ?? item.is_online ?? true,
-          isPro: Boolean(item.isPro ?? item.is_pro ?? false),
-          isBoosted: Boolean(item.is_boosted ?? item.isBoosted ?? false),
-          boostUntil: item.boost_until || item.boostUntil || null,
-          boostLevel: item.boost_level || item.boostLevel || null,
-          status: item.status || 'approuve',
-          rating: Number(item.rating ?? 5.0),
-          reviewCount: Number(item.reviewCount ?? item.review_count ?? 0),
-          completedJobs: Number(item.completedJobs ?? item.completed_jobs ?? 0),
-          bioVoiceText: item.bioVoiceText || item.bio_voice_text || item.bio || `Artisan ${item.name || ''}`,
-          reviews: item.reviews || [],
-          dailyViews: Number(item.dailyViews ?? item.daily_views ?? 0),
-          dailyCalls: Number(item.dailyCalls ?? item.daily_calls ?? 0),
-          registeredAt: item.registeredAt || item.registered_at || item.created_at,
-        }));
+        const mapped: Artisan[] = artisansData.map((item: any) => {
+          const artisanId = String(item.id);
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          const matchedReviews: Review[] = Array.isArray(reviewsData)
+            ? reviewsData
+                .filter((r: any) => String(r.artisan_id) === artisanId)
+                .map((r: any) => ({
+                  id: String(r.id),
+                  author: r.client_name || r.author || 'Client vérifié',
+                  rating: Number(r.rating || 5),
+                  text: r.comment || r.text || '',
+                  date: r.created_at
+                    ? new Date(r.created_at).toLocaleDateString('fr-FR', {
+                        day: 'numeric',
+                        month: 'short',
+                      })
+                    : 'Récemment',
+                }))
+            : [];
+
+          let computedRating = Number(item.rating ?? 5.0);
+          let computedReviewCount = Number(item.review_count ?? item.reviewCount ?? 0);
+
+          if (matchedReviews.length > 0) {
+            const sum = matchedReviews.reduce((acc, curr) => acc + curr.rating, 0);
+            computedRating = parseFloat((sum / matchedReviews.length).toFixed(1));
+            computedReviewCount = matchedReviews.length;
+          }
+
+          return {
+            id: artisanId,
+            name: item.name || item.full_name || 'Artisan',
+            phone: item.phone || item.tel || '',
+            whatsapp: item.whatsapp || item.phone?.replace(/\D/g, '') || '',
+            trade: item.trade || item.metier || 'Artisan',
+            customTradeName: item.customTradeName || item.custom_trade_name,
+            additionalTrades: item.additionalTrades || item.additional_trades || [],
+            addressDetail: item.addressDetail || item.address_detail || item.address || '',
+            lat: item.lat !== null && item.lat !== undefined ? Number(item.lat) : null,
+            lng: item.lng !== null && item.lng !== undefined ? Number(item.lng) : null,
+            avatar: item.avatar || item.avatar_url || '',
+            coverImage: item.coverImage || item.cover_image || '',
+            workPhotos: item.workPhotos || item.work_photos || [],
+            isOnline: item.isOnline ?? item.is_online ?? true,
+            isPro: Boolean(item.isPro ?? item.is_pro ?? false),
+            isBoosted: Boolean(item.is_boosted ?? item.isBoosted ?? false),
+            boostUntil: item.boost_until || item.boostUntil || null,
+            boostLevel: item.boost_level || item.boostLevel || null,
+            status: item.status || 'approuve',
+            rating: computedRating,
+            reviewCount: computedReviewCount,
+            completedJobs: Number(item.completedJobs ?? item.completed_jobs ?? 0),
+            bioVoiceText: item.bioVoiceText || item.bio_voice_text || item.bio || '',
+            reviews: matchedReviews,
+            dailyViews: Number(item.dailyViews ?? item.daily_views ?? 0),
+            dailyCalls: Number(item.dailyCalls ?? item.daily_calls ?? 0),
+            registeredAt: item.registeredAt || item.registered_at || item.created_at,
+          };
+        });
         setArtisans(mapped);
       } else {
         setArtisans([]);
@@ -335,12 +372,14 @@ export default function App() {
             phone: user.phone,
             whatsapp: user.phone ? user.phone.replace(/\D/g, '') : '',
             trade: artisanData.trade,
-            address_detail: artisanData.addressDetail || 'Atelier',
+            custom_trade_name: artisanData.customTradeName || null,
+            additional_trades: artisanData.additionalTrades || [],
+            address_detail: artisanData.addressDetail || '',
             lat: artisanData.lat,
             lng: artisanData.lng,
-            avatar:
-              user.avatar ||
-              'https://images.unsplash.com/photo-1540555700478-4be289fbecef?auto=format&fit=crop&w=400&q=80',
+            avatar: user.avatar || '',
+            cover_image: '',
+            work_photos: artisanData.workPhotos || [],
           },
         ])
         .select()
@@ -393,26 +432,69 @@ export default function App() {
     }, 3500);
   };
 
-  // Handler: Submit review with average rating recalculation
-  const handleSubmitReview = (artisanId: string, review: Review) => {
+  // Handler: Submit review with average rating recalculation & Supabase sync
+  const handleSubmitReview = async (artisanId: string, review: Review) => {
+    // 1. Local optimistic update
+    const targetArtisan = artisans.find((a) => a.id === artisanId);
+    const existingReviews = targetArtisan?.reviews || [];
+    const updatedReviews = [review, ...existingReviews];
+    const totalRating = updatedReviews.reduce((acc, r) => acc + r.rating, 0);
+    const newAvgRating = parseFloat((totalRating / updatedReviews.length).toFixed(1));
+    const newCount = updatedReviews.length;
+
     setArtisans((prev) =>
       prev.map((artisan) => {
         if (artisan.id === artisanId) {
-          const updatedReviews = [review, ...artisan.reviews];
-          const totalRating = updatedReviews.reduce((acc, r) => acc + r.rating, 0);
-          const newAvgRating = parseFloat((totalRating / updatedReviews.length).toFixed(1));
-
           return {
             ...artisan,
             reviews: updatedReviews,
-            reviewCount: updatedReviews.length,
+            reviewCount: newCount,
             rating: newAvgRating,
           };
         }
         return artisan;
       })
     );
+
+    setSelectedArtisanProfile((prev) => {
+      if (prev && prev.id === artisanId) {
+        return {
+          ...prev,
+          reviews: updatedReviews,
+          reviewCount: newCount,
+          rating: newAvgRating,
+        };
+      }
+      return prev;
+    });
+
     setRecentCalledArtisan(null);
+
+    // 2. Vrai INSERT dans la table public.reviews et mise à jour de la note de l'artisan
+    if (supabase) {
+      try {
+        const { error: revError } = await supabase.from('reviews').insert([
+          {
+            artisan_id: artisanId,
+            client_name: review.author,
+            rating: review.rating,
+            comment: review.text,
+          },
+        ]);
+
+        if (!revError) {
+          await supabase
+            .from('artisans')
+            .update({
+              rating: newAvgRating,
+              review_count: newCount,
+            })
+            .eq('id', artisanId);
+        }
+      } catch {
+        // ignore
+      }
+    }
   };
 
   // Handler: Pro upgrade

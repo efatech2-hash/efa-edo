@@ -482,13 +482,19 @@ export const HomeClient: React.FC<HomeClientProps> = ({
                   {/* Top card info */}
                   <div>
                     <div className="flex items-start gap-3 mb-3">
-                      {/* Avatar */}
+                      {/* Avatar : Photo réelle ou Initiale */}
                       <div className="relative shrink-0">
-                        <img
-                          src={artisan.avatar}
-                          alt={artisan.name}
-                          className="w-18 h-18 rounded-2xl object-cover border border-slate-100"
-                        />
+                        {artisan.avatar ? (
+                          <img
+                            src={artisan.avatar}
+                            alt={artisan.name}
+                            className="w-18 h-18 rounded-2xl object-cover border border-slate-100"
+                          />
+                        ) : (
+                          <div className="w-18 h-18 rounded-2xl bg-amber-500 text-slate-950 font-black text-2xl flex items-center justify-center border border-slate-100 uppercase">
+                            {(artisan.name?.charAt(0) || 'A').toUpperCase()}
+                          </div>
+                        )}
                         {/* Status indicator dot */}
                         {artisan.isOnline ? (
                           <div
@@ -558,16 +564,32 @@ export const HomeClient: React.FC<HomeClientProps> = ({
                       </div>
                     </div>
 
-                    {/* Address landmark & Bio excerpt */}
-                    <div className="bg-slate-50 p-2.5 rounded-xl mb-3 text-xs text-slate-600">
-                      <p className="font-bold text-slate-800 mb-0.5 flex items-center gap-1">
-                        <MapPin className="w-3 h-3 text-slate-400 shrink-0" />
-                        <span>{artisan.addressDetail}</span>
-                      </p>
-                      <p className="line-clamp-2 italic">
-                        « {artisan.bioVoiceText} »
-                      </p>
-                    </div>
+                    {/* Address landmark & Bio : Uniquement ce qui est saisi (pas de faux texte démo) */}
+                    {(() => {
+                      const addr = artisan.addressDetail?.trim() || '';
+                      const isDemo = addr.toLowerCase().includes('dépannage express') || addr.toLowerCase() === 'atelier';
+                      const cleanAddr = !isDemo && addr ? addr : '';
+                      const bio = artisan.bioVoiceText?.trim() || '';
+                      const cleanBio = !bio.toLowerCase().includes('dépannage express') && bio ? bio : '';
+
+                      if (!cleanAddr && !cleanBio) return null;
+
+                      return (
+                        <div className="bg-slate-50 p-2.5 rounded-xl mb-3 text-xs text-slate-600">
+                          {cleanAddr ? (
+                            <p className="font-bold text-slate-800 mb-0.5 flex items-center gap-1">
+                              <MapPin className="w-3 h-3 text-slate-400 shrink-0" />
+                              <span className="truncate">{cleanAddr}</span>
+                            </p>
+                          ) : null}
+                          {cleanBio ? (
+                            <p className="line-clamp-2 italic">
+                              « {cleanBio} »
+                            </p>
+                          ) : null}
+                        </div>
+                      );
+                    })()}
                   </div>
 
                   {/* HUGE ACTION BUTTONS: Min 56px height, high contrast */}

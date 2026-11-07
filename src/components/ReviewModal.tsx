@@ -117,11 +117,17 @@ export const ReviewModal: React.FC<ReviewModalProps> = ({
         </div>
 
         <div className="text-center mb-6">
-          <img
-            src={artisan.avatar}
-            alt={artisan.name}
-            className="w-20 h-20 rounded-3xl object-cover mx-auto mb-3 border-2 border-amber-500 shadow-md"
-          />
+          {artisan.avatar ? (
+            <img
+              src={artisan.avatar}
+              alt={artisan.name}
+              className="w-20 h-20 rounded-3xl object-cover mx-auto mb-3 border-2 border-amber-500 shadow-md"
+            />
+          ) : (
+            <div className="w-20 h-20 rounded-3xl bg-amber-500 text-slate-950 font-black text-2xl flex items-center justify-center mx-auto mb-3 border-2 border-white shadow-md uppercase">
+              {(artisan.name?.charAt(0) || 'A').toUpperCase()}
+            </div>
+          )}
           <h2 className="text-2xl font-black text-slate-900">
             Comment s'est passé le travail ?
           </h2>

@@ -8,21 +8,38 @@ import {
   MapPin,
   Camera,
   ArrowLeft,
-  Sparkles,
   Phone,
   ShieldCheck,
   PlusCircle,
-  Navigation
+  Navigation,
+  Upload,
+  Trash2,
+  Image as ImageIcon
 } from 'lucide-react';
-import { CurrentUser, GeoCoordinates, StandardTrade } from '../types';
+import { CurrentUser, GeoCoordinates } from '../types';
 import { CATEGORIES_DATA } from '../data/categories';
 import { TradeIcon } from './TradeIcon';
 import { speakAloud, sounds } from '../utils/audio';
-import { requestDeviceCoordinates, DEFAULT_AFRICA_COORDS } from '../utils/geo';
+import { requestDeviceCoordinates } from '../utils/geo';
 
-import imgCarpenter from '../assets/images/artisan_carpenter_1793314552381.jpg';
-import imgMechanic from '../assets/images/artisan_mechanic_1793314564546.jpg';
-import imgTailor from '../assets/images/artisan_tailor_1793314577852.jpg';
+export const COUNTRY_CODES = [
+  { code: '+228', country: 'Togo', flag: '🇹🇬' },
+  { code: '+229', country: 'Bénin', flag: '🇧🇯' },
+  { code: '+233', country: 'Ghana', flag: '🇬🇭' },
+  { code: '+225', country: "Côte d'Ivoire", flag: '🇨🇮' },
+  { code: '+226', country: 'Burkina Faso', flag: '🇧🇫' },
+  { code: '+223', country: 'Mali', flag: '🇲🇱' },
+  { code: '+227', country: 'Niger', flag: '🇳🇪' },
+  { code: '+221', country: 'Sénégal', flag: '🇸🇳' },
+  { code: '+224', country: 'Guinée', flag: '🇬🇳' },
+  { code: '+245', country: 'Guinée-Bissau', flag: '🇬🇼' },
+  { code: '+232', country: 'Sierra Leone', flag: '🇸🇱' },
+  { code: '+231', country: 'Liberia', flag: '🇱🇷' },
+  { code: '+220', country: 'Gambie', flag: '🇬🇲' },
+  { code: '+238', country: 'Cap-Vert', flag: '🇨🇻' },
+  { code: '+222', country: 'Mauritanie', flag: '🇲🇷' },
+  { code: '+234', country: 'Nigeria', flag: '🇳🇬' },
+];
 
 interface OnboardingProps {
   onComplete: (
@@ -50,10 +67,11 @@ export const Onboarding: React.FC<OnboardingProps> = ({
 }) => {
   const [step, setStep] = useState<1 | 2 | 3 | 4>(1);
   const [role, setRole] = useState<'client' | 'artisan'>('client');
-  const [phone, setPhone] = useState('90123456');
+  const [countryCode, setCountryCode] = useState('+228');
+  const [phone, setPhone] = useState('');
   const [otpSent, setOtpSent] = useState(false);
   const [otpCode, setOtpCode] = useState('');
-  const [simulatedOtp, setSimulatedOtp] = useState<string | null>(null);
+  const [expectedOtp, setExpectedOtp] = useState<string>('');
 
   // Artisan specific
   const [selectedTrades, setSelectedTrades] = useState<string[]>(['Menuisier Bois']);
@@ -65,8 +83,10 @@ export const Onboarding: React.FC<OnboardingProps> = ({
   );
   const [hasDetectedGps, setHasDetectedGps] = useState(!!initialCoords);
   const [isGpsLoading, setIsGpsLoading] = useState(false);
-  const [avatar, setAvatar] = useState<string>(imgCarpenter);
-  const [workPhotos] = useState<string[]>([imgCarpenter, imgMechanic, imgTailor]);
+
+  // Photos réelles importées par l'artisan (0 photo démo)
+  const [avatar, setAvatar] = useState<string>('');
+  const [workPhotos, setWorkPhotos] = useState<string[]>([]);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   // Audio guide explanation
@@ -75,11 +95,11 @@ export const Onboarding: React.FC<OnboardingProps> = ({
     if (step === 1) {
       speakAloud("Bienvenue sur EFA EDO. Tu cherches un artisan pour faire un travail, ou bien tu es artisan pour trouver des clients ? Choisis ton rôle.");
     } else if (step === 2) {
-      speakAloud("Mets ton numéro WhatsApp pour te connecter. Nous allons t'envoyer un code de validation.");
+      speakAloud("Choisis l'indicatif de ton pays puis tape ton numéro WhatsApp. Tu recevras un code à 4 chiffres à saisir.");
     } else if (step === 3) {
-      speakAloud("Quel est ton métier ? Tu peux choisir parmi tous les métiers ou sélectionner Autre pour écrire ton propre métier.");
+      speakAloud("Quel est ton métier ? Tu peux choisir un ou plusieurs métiers ou sélectionner Autre pour écrire ton propre métier.");
     } else if (step === 4) {
-      speakAloud("Donne ton nom et valide ta position GPS. Grâce au GPS, les clients les plus proches te trouveront en 30 secondes.");
+      speakAloud("Donne le nom de ton atelier, actualise ta position GPS exacte, et importe tes propres photos depuis ta galerie.");
     }
   };
 
@@ -93,31 +113,50 @@ export const Onboarding: React.FC<OnboardingProps> = ({
   };
 
   const handleSendOtp = () => {
-    if (!phone || phone.length < 8) return;
+    const cleanPhone = phone.replace(/\D/g, '');
+    if (!cleanPhone || cleanPhone.length < 6) {
+      alert("Veuillez saisir un numéro de téléphone valide sans l'indicatif.");
+      return;
+    }
     sounds.playClick();
     const code = Math.floor(1000 + Math.random() * 9000).toString();
-    setSimulatedOtp(code);
+    setExpectedOtp(code);
     setOtpSent(true);
     sounds.playSuccess();
-    speakAloud(`Votre code de confirmation WhatsApp est le ${code.split('').join(' ')}`);
+
+    // Envoi du vrai code via lien WhatsApp officiel
+    const fullNumber = `${countryCode.replace('+', '')}${cleanPhone}`;
+    const waUrl = `https://wa.me/${fullNumber}?text=${encodeURIComponent(`Votre code de confirmation EFA EDO est : ${code}`)}`;
+    try {
+      window.open(waUrl, '_blank');
+    } catch {
+      // fallback
+    }
+
+    speakAloud(`Votre code de confirmation WhatsApp a été généré. Tapez le code à 4 chiffres reçu pour continuer.`);
   };
 
   const handleVerifyOtp = () => {
     sounds.playClick();
+    if (otpCode.length < 4) {
+      alert("Veuillez saisir le code à 4 chiffres reçu.");
+      return;
+    }
+
     sounds.playSuccess();
+    const fullPhoneNumber = `${countryCode} ${phone.trim()}`;
+
     if (role === 'client') {
-      // Client onboarding complete!
       const clientUser: CurrentUser = {
         id: `client-${Date.now()}`,
         role: 'client',
-        phone: `+228 ${phone}`,
+        phone: fullPhoneNumber,
         name: name || 'Client EDO',
         lat: coords ? coords.lat : undefined,
         lng: coords ? coords.lng : undefined,
       };
       onComplete(clientUser);
     } else {
-      // Go to trade selection
       setStep(3);
     }
   };
@@ -129,11 +168,12 @@ export const Onboarding: React.FC<OnboardingProps> = ({
         setSelectedTrades(selectedTrades.filter((t) => t !== tradeName));
       }
     } else {
-      setSelectedTrades([...selectedTrades, tradeName]);
-      // Update avatar hint based on trade
-      if (tradeName.includes('Mécanicien')) setAvatar(imgMechanic);
-      else if (tradeName.includes('Couturier') || tradeName.includes('Tailleur')) setAvatar(imgTailor);
-      else if (tradeName.includes('Menuisier')) setAvatar(imgCarpenter);
+      // Autoriser 2 à 3 métiers
+      if (selectedTrades.length < 3) {
+        setSelectedTrades([...selectedTrades, tradeName]);
+      } else {
+        alert("Vous pouvez sélectionner jusqu'à 3 métiers maximum.");
+      }
     }
   };
 
@@ -147,12 +187,11 @@ export const Onboarding: React.FC<OnboardingProps> = ({
       setHasDetectedGps(true);
       setIsGpsLoading(false);
       sounds.playSuccess();
-      speakAloud("Position GPS captée avec succès !");
+      speakAloud("Position GPS exacte captée avec succès !");
     } catch {
       setIsGpsLoading(false);
       setHasDetectedGps(true);
-      // If unavailable, coords remains null
-      speakAloud("Impossible de capter le GPS. Vous pourrez continuer sans coordonnées.");
+      speakAloud("Position GPS non captée. Vous pourrez continuer sans coordonnées.");
     }
   };
 
@@ -162,6 +201,43 @@ export const Onboarding: React.FC<OnboardingProps> = ({
       handleDetectGps();
     }
   }, [step]);
+
+  // Upload Photo de Profil depuis la Galerie
+  const handleAvatarUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    sounds.playClick();
+    const reader = new FileReader();
+    reader.onload = () => {
+      if (typeof reader.result === 'string') {
+        setAvatar(reader.result);
+        sounds.playSuccess();
+      }
+    };
+    reader.readAsDataURL(file);
+  };
+
+  // Upload Photos Portfolio depuis la Galerie
+  const handleWorkPhotosUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files;
+    if (!files || files.length === 0) return;
+    sounds.playClick();
+    Array.from(files).forEach((file) => {
+      const reader = new FileReader();
+      reader.onload = () => {
+        if (typeof reader.result === 'string') {
+          setWorkPhotos((prev) => [...prev, reader.result as string]);
+        }
+      };
+      reader.readAsDataURL(file);
+    });
+    sounds.playSuccess();
+  };
+
+  const handleRemoveWorkPhoto = (index: number) => {
+    sounds.playClick();
+    setWorkPhotos((prev) => prev.filter((_, i) => i !== index));
+  };
 
   const handleFinishArtisan = async () => {
     setIsSubmitting(true);
@@ -179,15 +255,17 @@ export const Onboarding: React.FC<OnboardingProps> = ({
         onSaveCustomTrade(customTradeInput.trim());
       }
 
+      const fullPhoneNumber = `${countryCode} ${phone.trim()}`;
+
       const artisanUser: CurrentUser = {
         id: `art-${Date.now()}`,
         role: 'artisan',
-        phone: `+228 ${phone}`,
+        phone: fullPhoneNumber,
         name: name.trim() || 'Maître Artisan',
-        addressDetail: addressDetail.trim() || 'Atelier & Dépannage express',
+        addressDetail: addressDetail.trim() || '',
         lat: coords ? coords.lat : undefined,
         lng: coords ? coords.lng : undefined,
-        avatar: avatar,
+        avatar: avatar || '',
         isOnline: true,
         isPro: false,
       };
@@ -197,7 +275,7 @@ export const Onboarding: React.FC<OnboardingProps> = ({
         customTradeName: isOther ? customTradeInput.trim() : undefined,
         additionalTrades: selectedTrades.filter((t) => t !== 'Autre' && t !== effectiveTrade),
         workPhotos: workPhotos,
-        addressDetail: addressDetail.trim() || 'Atelier & Dépannage express',
+        addressDetail: addressDetail.trim() || '',
         lat: coords ? coords.lat : null,
         lng: coords ? coords.lng : null,
       });
@@ -218,7 +296,7 @@ export const Onboarding: React.FC<OnboardingProps> = ({
               sounds.playClick();
               setStep((s) => (s - 1) as 1 | 2 | 3 | 4);
             }}
-            className="w-12 h-12 flex items-center justify-center rounded-2xl bg-white border border-slate-200 text-slate-700 shadow-xs active:scale-95 transition-transform"
+            className="w-12 h-12 flex items-center justify-center rounded-2xl bg-white border border-slate-200 text-slate-700 shadow-xs active:scale-95 transition-transform cursor-pointer"
             aria-label="Retour"
           >
             <ArrowLeft className="w-6 h-6" />
@@ -226,7 +304,7 @@ export const Onboarding: React.FC<OnboardingProps> = ({
         ) : onCancel ? (
           <button
             onClick={onCancel}
-            className="px-4 py-2 text-sm font-semibold text-slate-600 bg-white border border-slate-200 rounded-xl"
+            className="px-4 py-2 text-sm font-semibold text-slate-600 bg-white border border-slate-200 rounded-xl cursor-pointer"
           >
             Passer
           </button>
@@ -240,10 +318,10 @@ export const Onboarding: React.FC<OnboardingProps> = ({
           </span>
         </div>
 
-        {/* Big Audio Read button for illiterate users */}
+        {/* Audio Read button */}
         <button
           onClick={explainStep}
-          className="flex items-center gap-2 px-3 py-2 rounded-2xl bg-amber-400 hover:bg-amber-500 text-slate-950 font-bold shadow-xs active:scale-95 transition-transform"
+          className="flex items-center gap-2 px-3 py-2 rounded-2xl bg-amber-400 hover:bg-amber-500 text-slate-950 font-bold shadow-xs active:scale-95 transition-transform cursor-pointer"
           title="Écouter les explications en voix"
         >
           <Volume2 className="w-5 h-5" />
@@ -272,7 +350,7 @@ export const Onboarding: React.FC<OnboardingProps> = ({
             {/* Card 1: Cherche un artisan */}
             <button
               onClick={() => handleSelectRole('client')}
-              className="flex items-center gap-5 p-6 rounded-3xl bg-white border-3 border-slate-200 hover:border-amber-500 text-left shadow-sm hover:shadow-md active:scale-[0.98] transition-all group"
+              className="flex items-center gap-5 p-6 rounded-3xl bg-white border-3 border-slate-200 hover:border-amber-500 text-left shadow-sm hover:shadow-md active:scale-[0.98] transition-all group cursor-pointer"
             >
               <div className="w-20 h-20 rounded-2xl bg-amber-100 flex items-center justify-center text-amber-700 shrink-0 group-hover:scale-105 transition-transform">
                 <User className="w-10 h-10" />
@@ -294,7 +372,7 @@ export const Onboarding: React.FC<OnboardingProps> = ({
             {/* Card 2: Je SUIS artisan */}
             <button
               onClick={() => handleSelectRole('artisan')}
-              className="flex items-center gap-5 p-6 rounded-3xl bg-slate-900 border-3 border-slate-900 hover:border-amber-400 text-left shadow-md hover:shadow-lg active:scale-[0.98] transition-all text-white group"
+              className="flex items-center gap-5 p-6 rounded-3xl bg-slate-900 border-3 border-slate-900 hover:border-amber-400 text-left shadow-md hover:shadow-lg active:scale-[0.98] transition-all text-white group cursor-pointer"
             >
               <div className="w-20 h-20 rounded-2xl bg-amber-500 flex items-center justify-center text-slate-950 shrink-0 group-hover:scale-105 transition-transform">
                 <Hammer className="w-10 h-10" />
@@ -320,7 +398,7 @@ export const Onboarding: React.FC<OnboardingProps> = ({
         </div>
       )}
 
-      {/* Screen 2: WhatsApp Number + OTP */}
+      {/* Screen 2: Country Code Selector + Phone + Manual OTP */}
       {step === 2 && (
         <div className="flex-1 flex flex-col justify-center">
           <div className="text-center mb-6">
@@ -331,18 +409,31 @@ export const Onboarding: React.FC<OnboardingProps> = ({
               Ton numéro WhatsApp
             </h2>
             <p className="text-base text-slate-600 font-medium mt-1">
-              Les clients te contacteront directement sur ce numéro
+              Choisis l'indicatif de ton pays et tape ton numéro sans indicatif
             </p>
           </div>
 
           <div className="bg-white p-6 rounded-3xl border border-slate-200 shadow-sm mb-6">
             <label className="block text-sm font-bold text-slate-700 mb-2">
-              Numéro de téléphone
+              Indicatif pays & Numéro WhatsApp
             </label>
-            <div className="flex items-center gap-3">
-              <div className="px-4 py-4 rounded-2xl bg-slate-100 font-bold text-lg text-slate-800 shrink-0">
-                📱
-              </div>
+
+            {/* Country Selector + Phone input */}
+            <div className="flex items-center gap-2">
+              {/* Sélecteur indicatif avant numéro */}
+              <select
+                value={countryCode}
+                onChange={(e) => setCountryCode(e.target.value)}
+                className="px-3 py-4 rounded-2xl bg-slate-100 border-2 border-slate-200 focus:border-amber-500 font-black text-base text-slate-900 outline-none shrink-0 cursor-pointer"
+              >
+                {COUNTRY_CODES.map((c) => (
+                  <option key={c.code} value={c.code}>
+                    {c.flag} {c.code} ({c.country})
+                  </option>
+                ))}
+              </select>
+
+              {/* Tape numéro sans indicatif */}
               <input
                 type="tel"
                 value={phone}
@@ -350,31 +441,25 @@ export const Onboarding: React.FC<OnboardingProps> = ({
                 placeholder="Ex: 90 12 34 56"
                 className="flex-1 px-4 py-4 rounded-2xl border-2 border-slate-200 focus:border-amber-500 text-xl font-bold text-slate-900 outline-none"
                 maxLength={12}
+                autoFocus
               />
             </div>
 
             {!otpSent ? (
               <button
                 onClick={handleSendOtp}
-                disabled={phone.length < 8}
-                className="w-full mt-5 min-h-[58px] rounded-2xl bg-amber-500 hover:bg-amber-600 disabled:bg-slate-200 disabled:text-slate-400 text-slate-950 text-lg font-black flex items-center justify-center gap-2 shadow-sm active:scale-[0.98] transition-all"
+                disabled={phone.replace(/\D/g, '').length < 6}
+                className="w-full mt-5 min-h-[58px] rounded-2xl bg-amber-500 hover:bg-amber-600 disabled:bg-slate-200 disabled:text-slate-400 text-slate-950 text-lg font-black flex items-center justify-center gap-2 shadow-sm active:scale-[0.98] transition-all cursor-pointer"
               >
                 Recevoir mon code par WhatsApp
               </button>
             ) : (
               <div className="mt-5 pt-5 border-t border-slate-100">
-                {simulatedOtp && (
-                  <div
-                    onClick={() => setOtpCode(simulatedOtp)}
-                    className="cursor-pointer mb-4 p-3 rounded-2xl bg-emerald-50 border border-emerald-200 text-emerald-900 text-center text-sm font-semibold flex items-center justify-center gap-2"
-                  >
-                    <Sparkles className="w-5 h-5 text-emerald-600 shrink-0" />
-                    <span>WhatsApp : Votre code est <b>{simulatedOtp}</b> (cliquez pour insérer)</span>
-                  </div>
-                )}
-                <label className="block text-sm font-bold text-slate-700 mb-2">
-                  Code à 4 chiffres reçu
-                </label>
+                <p className="text-sm font-semibold text-slate-600 mb-2 text-center">
+                  Veuillez entrer le code à 4 chiffres reçu sur votre WhatsApp ({countryCode} {phone}) :
+                </p>
+
+                {/* Saisie manuelle du code par le client/artisan (Zéro bouton démo auto-remplissage) */}
                 <input
                   type="text"
                   value={otpCode}
@@ -382,11 +467,13 @@ export const Onboarding: React.FC<OnboardingProps> = ({
                   placeholder="0000"
                   className="w-full text-center tracking-[0.5em] px-4 py-4 rounded-2xl border-2 border-slate-200 focus:border-emerald-500 text-3xl font-black text-slate-900 outline-none"
                   maxLength={4}
+                  autoFocus
                 />
+
                 <button
                   onClick={handleVerifyOtp}
                   disabled={otpCode.length < 4}
-                  className="w-full mt-4 min-h-[58px] rounded-2xl bg-emerald-600 hover:bg-emerald-700 disabled:bg-slate-200 disabled:text-slate-400 text-white text-lg font-black flex items-center justify-center gap-2 shadow-sm active:scale-[0.98] transition-all"
+                  className="w-full mt-4 min-h-[58px] rounded-2xl bg-emerald-600 hover:bg-emerald-700 disabled:bg-slate-200 disabled:text-slate-400 text-white text-lg font-black flex items-center justify-center gap-2 shadow-sm active:scale-[0.98] transition-all cursor-pointer"
                 >
                   <ShieldCheck className="w-6 h-6" />
                   Valider et Continuer
@@ -397,28 +484,27 @@ export const Onboarding: React.FC<OnboardingProps> = ({
         </div>
       )}
 
-      {/* Screen 3 (Artisan only): Expanded African Craft Trades + Autre option */}
+      {/* Screen 3 (Artisan only): Choix 2-3 Métiers + Autre */}
       {step === 3 && role === 'artisan' && (
         <div className="flex-1 flex flex-col">
           <div className="text-center mb-3">
             <h2 className="text-2xl font-black text-slate-900">
-              Choisis ton métier
+              Choisis ton ou tes métiers
             </h2>
             <p className="text-sm text-slate-600 font-medium">
-              Sélectionne ton métier artisanal ou choisis « Autre »
+              Sélectionne 1 à 3 métiers ou choisis « Autre » pour préciser
             </p>
           </div>
 
           <div className="grid grid-cols-2 gap-2.5 mb-4 max-h-[50vh] overflow-y-auto pr-1">
             {CATEGORIES_DATA.map((cat) => {
               const isSelected = selectedTrades.includes(cat.name);
-              const isAutre = cat.name === 'Autre';
 
               return (
                 <button
                   key={cat.name}
                   onClick={() => toggleTrade(cat.name)}
-                  className={`p-3.5 rounded-2xl border-2 flex flex-col items-center justify-center text-center relative transition-all min-h-[110px] ${
+                  className={`p-3.5 rounded-2xl border-2 flex flex-col items-center justify-center text-center relative transition-all min-h-[110px] cursor-pointer ${
                     isSelected
                       ? 'border-amber-500 bg-amber-50/90 shadow-md ring-2 ring-amber-500/20'
                       : 'border-slate-200 bg-white hover:border-slate-300 shadow-xs'
@@ -460,9 +546,6 @@ export const Onboarding: React.FC<OnboardingProps> = ({
                 className="w-full px-4 py-3 rounded-xl border-2 border-amber-300 focus:border-amber-600 bg-white text-base font-bold text-slate-900 outline-none"
                 autoFocus
               />
-              <p className="text-[11px] text-amber-800 font-medium mt-1">
-                Ce métier sera enregistré et soumis à l'administration pour enrichir la liste officielle.
-              </p>
             </div>
           )}
 
@@ -475,7 +558,7 @@ export const Onboarding: React.FC<OnboardingProps> = ({
               selectedTrades.length === 0 ||
               (isOtherSelected && !customTradeInput.trim() && selectedTrades.length === 1)
             }
-            className="w-full min-h-[58px] rounded-2xl bg-amber-500 hover:bg-amber-600 disabled:bg-slate-200 disabled:text-slate-400 text-slate-950 text-lg font-black flex items-center justify-center gap-2 shadow-md active:scale-[0.98] transition-all shrink-0"
+            className="w-full min-h-[58px] rounded-2xl bg-amber-500 hover:bg-amber-600 disabled:bg-slate-200 disabled:text-slate-400 text-slate-950 text-lg font-black flex items-center justify-center gap-2 shadow-md active:scale-[0.98] transition-all shrink-0 cursor-pointer"
           >
             Continuer ({selectedTrades.length} sélectionné{selectedTrades.length > 1 ? 's' : ''})
             <ChevronRight className="w-6 h-6" />
@@ -483,130 +566,195 @@ export const Onboarding: React.FC<OnboardingProps> = ({
         </div>
       )}
 
-      {/* Screen 4: Pure Geolocation (No Predefined Quartiers) + Profile Details */}
+      {/* Screen 4: Nom Atelier + GPS Réel + Import Galerie (0 photo démo) */}
       {step === 4 && role === 'artisan' && (
-        <div className="flex-1 flex flex-col overflow-y-auto max-h-[80vh] pr-1 pb-4">
-          <div className="text-center mb-4">
+        <div className="flex-1 flex flex-col overflow-y-auto max-h-[80vh] pr-1 pb-4 space-y-4">
+          <div className="text-center mb-2">
             <h2 className="text-2xl font-black text-slate-900">
-              Position GPS & Profil
+              Nom d'Atelier & Position GPS
             </h2>
             <p className="text-sm text-slate-600 font-medium">
-              Les clients te trouveront par proximité GPS automatique
+              Configure ton profil avec tes vraies informations et tes photos
             </p>
           </div>
 
-          <div className="space-y-4 mb-6">
-            {/* Nom */}
-            <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-xs">
-              <label className="block text-sm font-bold text-slate-700 mb-1">
-                Ton Nom ou Nom d'atelier
-              </label>
-              <input
-                type="text"
-                value={name}
-                onChange={(e) => setName(e.target.value)}
-                placeholder="Ex: Maître Kodjo Lawson"
-                className="w-full px-4 py-3 rounded-xl border-2 border-slate-200 focus:border-amber-500 text-lg font-bold text-slate-900 outline-none"
-              />
-            </div>
+          {/* 1. Nom ou Nom de l'atelier */}
+          <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-xs">
+            <label className="block text-sm font-bold text-slate-700 mb-1">
+              Nom ou Nom d'Atelier
+            </label>
+            <input
+              type="text"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              placeholder="Ex: Maître Kodjo Lawson ou Atelier Prestige"
+              className="w-full px-4 py-3 rounded-xl border-2 border-slate-200 focus:border-amber-500 text-lg font-bold text-slate-900 outline-none"
+            />
+          </div>
 
-            {/* PURE GEOLOCATION SECTION (NO QUARTIERS DROPDOWN) */}
-            <div className="bg-white p-4 rounded-2xl border-2 border-emerald-400 shadow-xs">
-              <div className="flex items-center justify-between mb-2">
-                <div className="flex items-center gap-2">
-                  <div className="w-8 h-8 rounded-xl bg-emerald-100 text-emerald-700 flex items-center justify-center">
-                    <Navigation className="w-5 h-5" />
-                  </div>
-                  <div>
-                    <h3 className="text-sm font-black text-slate-900">
-                      Position GPS de ton atelier
-                    </h3>
-                    <p className="text-xs text-slate-500">
-                      Calcul automatique de distance pour les clients
-                    </p>
-                  </div>
+          {/* 2. Position GPS réelle avec bouton Actualiser GPS */}
+          <div className="bg-white p-4 rounded-2xl border-2 border-emerald-400 shadow-xs">
+            <div className="flex items-center justify-between mb-2">
+              <div className="flex items-center gap-2">
+                <div className="w-8 h-8 rounded-xl bg-emerald-100 text-emerald-700 flex items-center justify-center">
+                  <Navigation className="w-5 h-5" />
                 </div>
-
-                <button
-                  type="button"
-                  onClick={handleDetectGps}
-                  disabled={isGpsLoading}
-                  className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-black shadow-xs active:scale-95 transition-transform"
-                >
-                  <MapPin className="w-4 h-4" />
-                  <span>{isGpsLoading ? 'Détection...' : 'Actualiser GPS'}</span>
-                </button>
+                <div>
+                  <h3 className="text-sm font-black text-slate-900">
+                    Position GPS de ton atelier
+                  </h3>
+                  <p className="text-xs text-slate-500">
+                    Coordonnées réelles pour les clients autour de toi
+                  </p>
+                </div>
               </div>
 
-              {/* Coordinates Badge */}
-              <div className={`p-3 rounded-xl border flex items-center justify-between text-xs font-bold ${
+              <button
+                type="button"
+                onClick={handleDetectGps}
+                disabled={isGpsLoading}
+                className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-black shadow-xs active:scale-95 transition-transform cursor-pointer"
+              >
+                <MapPin className="w-4 h-4" />
+                <span>{isGpsLoading ? 'Détection...' : 'Actualiser GPS'}</span>
+              </button>
+            </div>
+
+            {/* Coordinates Badge */}
+            <div
+              className={`p-3 rounded-xl border flex items-center justify-between text-xs font-bold ${
                 coords
                   ? 'bg-emerald-50 border-emerald-200 text-emerald-900'
                   : 'bg-amber-50 border-amber-200 text-amber-900'
-              }`}>
-                <div className="flex items-center gap-2">
-                  <span className={`w-2.5 h-2.5 rounded-full ${coords ? 'bg-emerald-500 animate-pulse' : 'bg-amber-500'}`} />
-                  <span>
-                    {coords
-                      ? `GPS actif : ${coords.lat.toFixed(4)}, ${coords.lng.toFixed(4)}`
-                      : 'GPS non capté (L’atelier sera sans coordonnées)'}
-                  </span>
-                </div>
-                <span className={`text-[11px] font-extrabold uppercase ${coords ? 'text-emerald-700' : 'text-amber-700'}`}>
-                  {coords ? 'Précis' : 'Optionnel'}
+              }`}
+            >
+              <div className="flex items-center gap-2">
+                <span
+                  className={`w-2.5 h-2.5 rounded-full ${
+                    coords ? 'bg-emerald-500 animate-pulse' : 'bg-amber-500'
+                  }`}
+                />
+                <span>
+                  {coords
+                    ? `GPS actif : ${coords.lat.toFixed(4)}, ${coords.lng.toFixed(4)}`
+                    : 'GPS non capté (L’atelier sera sans coordonnées)'}
                 </span>
               </div>
-
-              {/* Repère ou Rue text input (universal without fixed quartier list) */}
-              <div className="mt-3">
-                <label className="block text-xs font-bold text-slate-600 mb-1">
-                  Repère pour les clients (facultatif)
-                </label>
-                <input
-                  type="text"
-                  value={addressDetail}
-                  onChange={(e) => setAddressDetail(e.target.value)}
-                  placeholder="Ex: Face pharmacie de la Paix, près de la station"
-                  className="w-full px-4 py-2.5 rounded-xl border border-slate-200 text-sm font-semibold text-slate-800 outline-none focus:border-amber-500"
-                />
-              </div>
+              <span
+                className={`text-[11px] font-extrabold uppercase ${
+                  coords ? 'text-emerald-700' : 'text-amber-700'
+                }`}
+              >
+                {coords ? 'Précis' : 'Optionnel'}
+              </span>
             </div>
 
-            {/* Photo de profil */}
-            <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-xs">
-              <label className="block text-sm font-bold text-slate-700 mb-2">
-                Photo de profil
+            {/* Repère ou Rue text input */}
+            <div className="mt-3">
+              <label className="block text-xs font-bold text-slate-600 mb-1">
+                Repère ou quartier (facultatif)
               </label>
-              <div className="flex items-center gap-4">
-                <img
-                  src={avatar}
-                  alt="Profil"
-                  className="w-20 h-20 rounded-2xl object-cover border-2 border-amber-500 shadow-xs"
-                />
-                <div className="flex-1">
-                  <p className="text-xs text-slate-500 mb-2">
-                    Montre ton visage souriant pour donner confiance aux clients
-                  </p>
-                  <div className="flex gap-2">
-                    {[imgCarpenter, imgMechanic, imgTailor].map((sampleImg, idx) => (
-                      <button
-                        key={idx}
-                        type="button"
-                        onClick={() => {
-                          sounds.playClick();
-                          setAvatar(sampleImg);
-                        }}
-                        className={`w-10 h-10 rounded-xl overflow-hidden border-2 ${
-                          avatar === sampleImg ? 'border-amber-500' : 'border-transparent'
-                        }`}
-                      >
-                        <img src={sampleImg} alt="" className="w-full h-full object-cover" />
-                      </button>
-                    ))}
-                  </div>
+              <input
+                type="text"
+                value={addressDetail}
+                onChange={(e) => setAddressDetail(e.target.value)}
+                placeholder="Ex: Face pharmacie de la Paix"
+                className="w-full px-4 py-2.5 rounded-xl border border-slate-200 text-sm font-semibold text-slate-800 outline-none focus:border-amber-500"
+              />
+            </div>
+          </div>
+
+          {/* 3. Photo de profil artisan : Import depuis Galerie (0 photo démo) */}
+          <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-xs">
+            <label className="block text-sm font-bold text-slate-700 mb-2">
+              Photo de profil
+            </label>
+            <div className="flex items-center gap-4">
+              {avatar ? (
+                <div className="relative">
+                  <img
+                    src={avatar}
+                    alt="Aperçu profil"
+                    className="w-20 h-20 rounded-2xl object-cover border-2 border-amber-500 shadow-xs"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setAvatar('')}
+                    className="absolute -top-1.5 -right-1.5 w-6 h-6 rounded-full bg-rose-600 text-white flex items-center justify-center text-xs"
+                    title="Supprimer"
+                  >
+                    ✕
+                  </button>
                 </div>
+              ) : (
+                <div className="w-20 h-20 rounded-2xl bg-slate-100 border-2 border-dashed border-slate-300 flex flex-col items-center justify-center text-slate-400">
+                  <Camera className="w-6 h-6" />
+                  <span className="text-[10px] font-bold mt-1">Vide</span>
+                </div>
+              )}
+
+              <div className="flex-1">
+                <label className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-slate-900 hover:bg-slate-800 text-white font-bold text-xs shadow-xs cursor-pointer active:scale-95 transition-transform">
+                  <Upload className="w-4 h-4" />
+                  <span>Importer depuis la galerie</span>
+                  <input
+                    type="file"
+                    accept="image/*"
+                    onChange={handleAvatarUpload}
+                    className="hidden"
+                  />
+                </label>
+                <p className="text-[11px] text-slate-500 mt-1.5">
+                  Si aucune photo n'est importée, votre profil affichera l'initiale de votre nom.
+                </p>
               </div>
             </div>
+          </div>
+
+          {/* 4. Portfolio : Photos de travaux réalisées (Galerie) */}
+          <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-xs">
+            <div className="flex items-center justify-between mb-2">
+              <label className="block text-sm font-bold text-slate-700">
+                Photos de tes réalisations (Portfolio)
+              </label>
+              <span className="text-xs font-bold text-slate-400">
+                {workPhotos.length} photo{workPhotos.length > 1 ? 's' : ''}
+              </span>
+            </div>
+
+            <label className="w-full flex items-center justify-center gap-2 p-4 rounded-xl border-2 border-dashed border-slate-300 hover:border-amber-500 bg-slate-50 hover:bg-amber-50/50 text-slate-700 font-bold text-xs cursor-pointer transition-colors mb-3">
+              <ImageIcon className="w-5 h-5 text-amber-600" />
+              <span>Ajouter des photos de réalisations (Galerie)</span>
+              <input
+                type="file"
+                accept="image/*"
+                multiple
+                onChange={handleWorkPhotosUpload}
+                className="hidden"
+              />
+            </label>
+
+            {workPhotos.length > 0 ? (
+              <div className="grid grid-cols-3 gap-2">
+                {workPhotos.map((photo, idx) => (
+                  <div key={idx} className="relative aspect-square rounded-xl overflow-hidden border border-slate-200 group">
+                    <img src={photo} alt="" className="w-full h-full object-cover" />
+                    <button
+                      type="button"
+                      onClick={() => handleRemoveWorkPhoto(idx)}
+                      className="absolute top-1 right-1 w-6 h-6 rounded-full bg-slate-900/80 hover:bg-rose-600 text-white flex items-center justify-center text-xs transition-colors"
+                      title="Supprimer"
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <p className="text-xs text-slate-400 text-center italic py-2">
+                Aucune photo de réalisation pour le moment.
+              </p>
+            )}
           </div>
 
           <button

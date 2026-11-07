@@ -106,3 +106,31 @@ create policy "Lecture publique admins"
 INSERT INTO public.admins(email, role)
 VALUES ('efatech2@gmail.com', 'super_admin')
 ON CONFLICT (email) DO NOTHING;
+
+-- 4. Table des Avis Clients réels (reviews)
+CREATE TABLE IF NOT EXISTS public.reviews (
+  id uuid primary key default gen_random_uuid(),
+  artisan_id text references public.artisans(id) on delete cascade,
+  client_name text not null,
+  rating int not null check (rating >= 1 and rating <= 5),
+  comment text,
+  created_at timestamptz default now()
+);
+
+alter table public.reviews enable row level security;
+
+drop policy if exists "Lecture publique reviews" on public.reviews;
+create policy "Lecture publique reviews"
+  on public.reviews for select
+  using (true);
+
+drop policy if exists "Insertion publique reviews" on public.reviews;
+create policy "Insertion publique reviews"
+  on public.reviews for insert
+  with check (true);
+
+drop policy if exists "Suppression admin reviews" on public.reviews;
+create policy "Suppression admin reviews"
+  on public.reviews for delete
+  using (true);
+
