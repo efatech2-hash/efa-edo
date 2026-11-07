@@ -1,0 +1,10 @@
+{
+  "name": "EFA EDO - Marketplace des Artisans",
+  "description": "Trouve un artisan pro près de toi en 30 secondes. Marketplace ultra simple pour artisans et clients africains avec assistance vocale et géolocalisation.",
+  "requestFramePermissions": [
+    "geolocation",
+    "microphone"
+  ],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
+

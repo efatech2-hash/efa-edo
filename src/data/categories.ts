@@ -1,0 +1,130 @@
+import { StandardTrade, TradeMeta } from '../types';
+
+export const CATEGORIES_DATA: TradeMeta[] = [
+  {
+    name: 'Menuisier Bois',
+    iconName: 'Hammer',
+    color: '#D97706',
+    description: 'Meubles en teck, portes, lits, charpente et réparation',
+  },
+  {
+    name: 'Menuisier Alu & Vitrier',
+    iconName: 'Building',
+    color: '#0284C7',
+    description: 'Baies vitrées, portes alu, vitres, vérandas modernes',
+  },
+  {
+    name: 'Mécanicien Auto & Moto',
+    iconName: 'Wrench',
+    color: '#DC2626',
+    description: 'Moteur voiture, moto, vidange, dépannage express route',
+  },
+  {
+    name: 'Vulcanisateur',
+    iconName: 'Disc',
+    color: '#EA580C',
+    description: 'Dépannage pneus, crevaison moto & auto, gonflage',
+  },
+  {
+    name: 'Soudeur & Ferronnier',
+    iconName: 'Flame',
+    color: '#C2410C',
+    description: 'Portails fer forgé, antivols fenêtres, grilles métalliques',
+  },
+  {
+    name: 'Maçon',
+    iconName: 'Brick',
+    color: '#78716C',
+    description: 'Fondations, briques, élévation de murs, crépissage et béton',
+  },
+  {
+    name: 'Carreleur',
+    iconName: 'Grid',
+    color: '#0F766E',
+    description: 'Pose de carrelage au sol, faïence douche, mosaïque',
+  },
+  {
+    name: 'Plombier',
+    iconName: 'Droplets',
+    color: '#0891B2',
+    description: 'Fuites d’eau, tuyauterie, WC, robinets, citernes d’eau',
+  },
+  {
+    name: 'Électricien',
+    iconName: 'Zap',
+    color: '#EAB308',
+    description: 'Pannes courant, compteurs Cash Power, câblage, solaire',
+  },
+  {
+    name: 'Peintre',
+    iconName: 'Paintbrush',
+    color: '#854D0E',
+    description: 'Peinture bâtiment intérieure & extérieure, enduit, déco',
+  },
+  {
+    name: 'Couturier & Tailleur',
+    iconName: 'Scissors',
+    color: '#9333EA',
+    description: 'Tenues wax, bazin brodé, costumes, retouches express',
+  },
+  {
+    name: 'Coiffeur & Barbier',
+    iconName: 'ScissorsSquare',
+    color: '#2563EB',
+    description: 'Coupes hommes, dégradés nets, traçage barbe et soins',
+  },
+  {
+    name: 'Coiffeuse & Tresseuse',
+    iconName: 'Sparkles',
+    color: '#EC4899',
+    description: 'Tresses africaines, tissages, perruques et soins capillaires',
+  },
+  {
+    name: 'Esthéticienne & Make-up',
+    iconName: 'Flower2',
+    color: '#DB2777',
+    description: 'Maquillage cérémonies, soins du visage, manucure et pédicure',
+  },
+  {
+    name: 'Cordonnier',
+    iconName: 'Footprints',
+    color: '#B45309',
+    description: 'Réparation de chaussures, semelles, sandales et ceintures cuir',
+  },
+  {
+    name: 'Frigoriste & Climatisation',
+    iconName: 'Snowflake',
+    color: '#06B6D4',
+    description: 'Installation et dépannage clim, frigos, chambres froides',
+  },
+  {
+    name: 'Électronicien (TV & GSM)',
+    iconName: 'Smartphone',
+    color: '#4F46E5',
+    description: 'Réparation téléphones, écrans cassés, téléviseurs et radios',
+  },
+  {
+    name: 'Tapissier',
+    iconName: 'Armchair',
+    color: '#475569',
+    description: 'Rembourrage canapés, confection salons, réparation mousses',
+  },
+  {
+    name: 'Blanchisseur & Pressing',
+    iconName: 'Shirt',
+    color: '#10B981',
+    description: 'Lavage, repassage vapeur soigné, pressing express',
+  },
+  {
+    name: 'Commerçant',
+    iconName: 'ShoppingBag',
+    color: '#059669',
+    description: 'Vente outillage, quincaillerie, pièces détachées et matériaux',
+  },
+  {
+    name: 'Autre',
+    iconName: 'PlusCircle',
+    color: '#64748B',
+    description: 'Précise ton métier artisanal s’il n’est pas dans la liste',
+  },
+];
