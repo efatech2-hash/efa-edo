@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import {
   Power,
   Eye,
@@ -7,10 +7,13 @@ import {
   Volume2,
   CheckCircle2,
   UserCheck,
-  ExternalLink
+  ExternalLink,
+  Edit,
+  Lock,
 } from 'lucide-react';
 import { Artisan, CurrentUser } from '../types';
 import { speakAloud, sounds } from '../utils/audio';
+import { ArtisanEditProfileModal } from './ArtisanEditProfileModal';
 
 interface HomeArtisanProps {
   currentArtisan: Artisan;
@@ -18,6 +21,7 @@ interface HomeArtisanProps {
   onToggleStatus: (newStatus: boolean) => void;
   onOpenProModal: () => void;
   onViewPublicProfile: (artisan: Artisan) => void;
+  onUpdateArtisan?: (updated: Artisan) => void;
 }
 
 export const HomeArtisan: React.FC<HomeArtisanProps> = ({
@@ -26,7 +30,19 @@ export const HomeArtisan: React.FC<HomeArtisanProps> = ({
   onToggleStatus,
   onOpenProModal,
   onViewPublicProfile,
+  onUpdateArtisan,
 }) => {
+  const [isEditModalOpen, setIsEditModalOpen] = useState(false);
+
+  // Check 7-day rule
+  const lastUpdate = currentArtisan.lastProfileUpdate
+    ? new Date(currentArtisan.lastProfileUpdate).getTime()
+    : 0;
+  const SEVEN_DAYS_MS = 7 * 24 * 60 * 60 * 1000;
+  const isLocked = lastUpdate > 0 && Date.now() - lastUpdate < SEVEN_DAYS_MS;
+  const daysRemaining = isLocked
+    ? Math.ceil((SEVEN_DAYS_MS - (Date.now() - lastUpdate)) / (24 * 60 * 60 * 1000))
+    : 0;
   const handleToggle = () => {
     sounds.playClick();
     const nextStatus = !currentArtisan.isOnline;
@@ -199,6 +215,34 @@ export const HomeArtisan: React.FC<HomeArtisanProps> = ({
 
       {/* Quick Action Tools */}
       <div className="space-y-3">
+        {/* Modifier mon profil (1x / 7 jours) */}
+        <button
+          onClick={() => {
+            sounds.playClick();
+            setIsEditModalOpen(true);
+          }}
+          className="w-full min-h-[56px] rounded-2xl bg-amber-500 hover:bg-amber-600 text-slate-950 font-black text-base flex items-center justify-between px-5 shadow-xs active:scale-[0.99] transition-all cursor-pointer"
+        >
+          <div className="flex items-center gap-3">
+            <Edit className="w-6 h-6 text-slate-950" />
+            <div className="text-left">
+              <span className="block leading-tight">Modifier mon profil</span>
+              <span className="text-[11px] font-bold opacity-80">
+                {isLocked
+                  ? `Bloqué · Réessaie dans ${daysRemaining}j`
+                  : 'Modifiable 1 fois par 7 jours'}
+              </span>
+            </div>
+          </div>
+          {isLocked ? (
+            <Lock className="w-5 h-5 text-slate-950/70" />
+          ) : (
+            <span className="text-xs font-black uppercase bg-slate-950 text-amber-300 px-2.5 py-1 rounded-xl">
+              Éditer
+            </span>
+          )}
+        </button>
+
         <button
           onClick={() => {
             sounds.playClick();
@@ -213,6 +257,19 @@ export const HomeArtisan: React.FC<HomeArtisanProps> = ({
           <ExternalLink className="w-5 h-5 text-slate-400" />
         </button>
       </div>
+
+      {/* Modal Edition Profil (1x / 7 jours) */}
+      {isEditModalOpen && (
+        <ArtisanEditProfileModal
+          artisan={currentArtisan}
+          onClose={() => setIsEditModalOpen(false)}
+          onSaveSuccess={(updated) => {
+            if (onUpdateArtisan) {
+              onUpdateArtisan(updated);
+            }
+          }}
+        />
+      )}
     </div>
   );
 };

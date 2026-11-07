@@ -5,40 +5,42 @@ import {
   Play,
   Pause,
   Phone,
-  Power,
   Search,
-  Sparkles
+  Sparkles,
+  ShieldCheck,
 } from 'lucide-react';
 import { speakAloud, sounds } from '../utils/audio';
 
 interface VoiceGuideModalProps {
   onClose: () => void;
+  role?: 'client' | 'artisan';
 }
 
 export const VoiceGuideModal: React.FC<VoiceGuideModalProps> = ({ onClose }) => {
   const [playingIndex, setPlayingIndex] = useState<number | null>(null);
 
+  // Client Voice Guide: SEULEMENT 4 points spécifiques pour les clients
   const guideItems = [
     {
       title: "1. Comment trouver un bon artisan ?",
       audioText:
-        "Pour trouver un bon artisan, touche l'icône du métier que tu cherches, comme mécanicien, menuisier ou tailleur. Les artisans qui ont un point vert sont disponibles immédiatement près de chez toi.",
+        "Pour trouver un bon artisan, touche l'icône du métier que tu cherches, comme mécanicien, menuisier, électricien ou tailleur. Les artisans qui ont un point vert sont disponibles immédiatement près de chez toi.",
       icon: Search,
       color: '#0284C7',
     },
     {
-      title: "2. Comment l'appeler ou lui écrire ?",
+      title: "2. Comment l'appeler ou lui écrire sur WhatsApp ?",
       audioText:
-        "Touche le gros bouton vert marqué APPELER pour lui téléphoner directement. Ou touche le bouton WhatsApp pour lui envoyer un message et des photos de ton problème.",
+        "Touche le gros bouton vert APPELER pour lui téléphoner directement. Ou touche le bouton WhatsApp pour lui envoyer un message et lui envoyer les photos de ton besoin.",
       icon: Phone,
       color: '#16A34A',
     },
     {
-      title: "3. Artisan : comment recevoir des clients ?",
+      title: "3. Qu'est-ce que la note et la garantie EDO ?",
       audioText:
-        "Si tu es artisan, va dans Mon Atelier et touche le GROS bouton rond au milieu. Quand il devient vert et dit JE SUIS DISPONIBLE, tous les clients proches de toi te voient sur la carte. Quand tu as fini ta journée, touche-le pour te reposer.",
-      icon: Power,
-      color: '#EA580C',
+        "Chaque artisan sur EFA EDO est noté de 1 à 5 étoiles par de vrais clients après chaque travail terminé. Tu peux consulter ses avis réels et donner ta propre note après son intervention.",
+      icon: ShieldCheck,
+      color: '#10B981',
     },
     {
       title: "4. Que signifie EDO ?",

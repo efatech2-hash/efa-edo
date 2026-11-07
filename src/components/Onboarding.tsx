@@ -413,22 +413,22 @@ export const Onboarding: React.FC<OnboardingProps> = ({
             </p>
           </div>
 
-          <div className="bg-white p-6 rounded-3xl border border-slate-200 shadow-sm mb-6">
-            <label className="block text-sm font-bold text-slate-700 mb-2">
+          <div className="bg-white p-4 sm:p-6 rounded-3xl border border-slate-200 shadow-sm mb-6">
+            <label className="block text-xs sm:text-sm font-bold text-slate-700 mb-1.5">
               Indicatif pays & Numéro WhatsApp
             </label>
 
-            {/* Country Selector + Phone input */}
-            <div className="flex items-center gap-2">
+            {/* Country Selector + Phone input: Compact, côte à côte, width flex, zéro débordement sur 360px */}
+            <div className="flex items-center gap-1.5 w-full min-w-0">
               {/* Sélecteur indicatif avant numéro */}
               <select
                 value={countryCode}
                 onChange={(e) => setCountryCode(e.target.value)}
-                className="px-3 py-4 rounded-2xl bg-slate-100 border-2 border-slate-200 focus:border-amber-500 font-black text-base text-slate-900 outline-none shrink-0 cursor-pointer"
+                className="w-[98px] sm:w-[120px] px-2 py-3 rounded-xl bg-slate-100 border-2 border-slate-200 focus:border-amber-500 font-black text-xs sm:text-sm text-slate-900 outline-none shrink-0 cursor-pointer"
               >
                 {COUNTRY_CODES.map((c) => (
                   <option key={c.code} value={c.code}>
-                    {c.flag} {c.code} ({c.country})
+                    {c.flag} {c.code}
                   </option>
                 ))}
               </select>
@@ -439,24 +439,28 @@ export const Onboarding: React.FC<OnboardingProps> = ({
                 value={phone}
                 onChange={(e) => setPhone(e.target.value.replace(/\D/g, ''))}
                 placeholder="Ex: 90 12 34 56"
-                className="flex-1 px-4 py-4 rounded-2xl border-2 border-slate-200 focus:border-amber-500 text-xl font-bold text-slate-900 outline-none"
+                className="flex-1 min-w-0 px-3 py-3 rounded-xl border-2 border-slate-200 focus:border-amber-500 text-base sm:text-lg font-bold text-slate-900 outline-none"
                 maxLength={12}
                 autoFocus
               />
             </div>
 
+            <p className="text-[11px] font-bold text-slate-500 mt-1.5">
+              Pays : <span className="text-amber-700">{COUNTRY_CODES.find((c) => c.code === countryCode)?.country || 'Togo'}</span> ({countryCode})
+            </p>
+
             {!otpSent ? (
               <button
                 onClick={handleSendOtp}
                 disabled={phone.replace(/\D/g, '').length < 6}
-                className="w-full mt-5 min-h-[58px] rounded-2xl bg-amber-500 hover:bg-amber-600 disabled:bg-slate-200 disabled:text-slate-400 text-slate-950 text-lg font-black flex items-center justify-center gap-2 shadow-sm active:scale-[0.98] transition-all cursor-pointer"
+                className="w-full mt-4 min-h-[52px] sm:min-h-[58px] rounded-2xl bg-amber-500 hover:bg-amber-600 disabled:bg-slate-200 disabled:text-slate-400 text-slate-950 text-base sm:text-lg font-black flex items-center justify-center gap-2 shadow-sm active:scale-[0.98] transition-all cursor-pointer"
               >
                 Recevoir mon code par WhatsApp
               </button>
             ) : (
-              <div className="mt-5 pt-5 border-t border-slate-100">
-                <p className="text-sm font-semibold text-slate-600 mb-2 text-center">
-                  Veuillez entrer le code à 4 chiffres reçu sur votre WhatsApp ({countryCode} {phone}) :
+              <div className="mt-4 pt-4 border-t border-slate-100">
+                <p className="text-xs sm:text-sm font-semibold text-slate-600 mb-2 text-center">
+                  Entre le code à 4 chiffres reçu sur ton WhatsApp ({countryCode} {phone}) :
                 </p>
 
                 {/* Saisie manuelle du code par le client/artisan (Zéro bouton démo auto-remplissage) */}
@@ -465,7 +469,7 @@ export const Onboarding: React.FC<OnboardingProps> = ({
                   value={otpCode}
                   onChange={(e) => setOtpCode(e.target.value.replace(/\D/g, ''))}
                   placeholder="0000"
-                  className="w-full text-center tracking-[0.5em] px-4 py-4 rounded-2xl border-2 border-slate-200 focus:border-emerald-500 text-3xl font-black text-slate-900 outline-none"
+                  className="w-full text-center tracking-[0.3em] sm:tracking-[0.5em] px-3 py-3 rounded-2xl border-2 border-slate-200 focus:border-emerald-500 text-2xl sm:text-3xl font-black text-slate-900 outline-none"
                   maxLength={4}
                   autoFocus
                 />
@@ -473,9 +477,9 @@ export const Onboarding: React.FC<OnboardingProps> = ({
                 <button
                   onClick={handleVerifyOtp}
                   disabled={otpCode.length < 4}
-                  className="w-full mt-4 min-h-[58px] rounded-2xl bg-emerald-600 hover:bg-emerald-700 disabled:bg-slate-200 disabled:text-slate-400 text-white text-lg font-black flex items-center justify-center gap-2 shadow-sm active:scale-[0.98] transition-all cursor-pointer"
+                  className="w-full mt-3 min-h-[52px] sm:min-h-[58px] rounded-2xl bg-emerald-600 hover:bg-emerald-700 disabled:bg-slate-200 disabled:text-slate-400 text-white text-base sm:text-lg font-black flex items-center justify-center gap-2 shadow-sm active:scale-[0.98] transition-all cursor-pointer"
                 >
-                  <ShieldCheck className="w-6 h-6" />
+                  <ShieldCheck className="w-5 h-5 sm:w-6 sm:h-6" />
                   Valider et Continuer
                 </button>
               </div>

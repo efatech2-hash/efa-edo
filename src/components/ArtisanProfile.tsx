@@ -100,43 +100,43 @@ export const ArtisanProfile: React.FC<ArtisanProfileProps> = ({
 
   return (
     <div className="max-w-3xl mx-auto pb-32">
-      {/* Top Floating Back, Title & Actions bar (100% Smartphone Responsive) */}
-      <div className="sticky top-0 z-30 flex items-center justify-between gap-2 p-3 sm:p-4 bg-white/95 backdrop-blur-md border-b border-slate-200">
+      {/* Top Floating Back, Title & Actions bar (100% Smartphone Responsive, 0 débordement sur 360px) */}
+      <div className="sticky top-0 z-30 flex items-center justify-between gap-1.5 px-2.5 sm:px-4 py-2 sm:py-3 bg-white/95 backdrop-blur-md border-b border-slate-200">
         <button
           onClick={() => {
             sounds.playClick();
             onBack();
           }}
-          className="w-11 h-11 min-w-[44px] min-h-[44px] rounded-2xl bg-slate-100 hover:bg-slate-200 text-slate-800 flex items-center justify-center active:scale-95 transition-transform shrink-0 cursor-pointer"
+          className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl sm:rounded-2xl bg-slate-100 hover:bg-slate-200 text-slate-800 flex items-center justify-center active:scale-95 transition-transform shrink-0 cursor-pointer"
           aria-label="Retour"
         >
-          <ArrowLeft className="w-5 h-5" />
+          <ArrowLeft className="w-4 h-4 sm:w-5 sm:h-5" />
         </button>
 
-        <span className="font-black text-sm sm:text-base text-slate-900 truncate flex-1 text-center px-1">
+        <span className="font-black text-xs sm:text-sm text-slate-900 truncate flex-1 text-center px-1 min-w-0">
           {artisan.name}
         </span>
 
-        {/* Right Action buttons: Yellow tactile speaker + Share */}
-        <div className="flex items-center gap-1.5 shrink-0">
+        {/* Right Action buttons: Yellow tactile speaker + Share (adaptive size & position) */}
+        <div className="flex items-center gap-1 sm:gap-1.5 shrink-0">
           <button
             onClick={togglePlayBio}
-            className={`w-11 h-11 min-w-[44px] min-h-[44px] rounded-2xl ${
+            className={`w-9 h-9 sm:w-10 sm:h-10 rounded-xl sm:rounded-2xl ${
               isPlayingBio ? 'bg-amber-500 animate-pulse' : 'bg-amber-400 hover:bg-amber-500'
             } text-slate-950 flex items-center justify-center active:scale-95 transition-transform shadow-xs shrink-0 cursor-pointer`}
             title={isPlayingBio ? 'Arrêter la voix' : 'Écouter la présentation audio'}
             aria-label="Écouter la présentation de l'artisan"
           >
-            {isPlayingBio ? <Pause className="w-5 h-5" /> : <Volume2 className="w-5 h-5" />}
+            {isPlayingBio ? <Pause className="w-4 h-4 sm:w-5 sm:h-5" /> : <Volume2 className="w-4 h-4 sm:w-5 sm:h-5" />}
           </button>
 
           <button
             onClick={handleShare}
-            className="w-11 h-11 min-w-[44px] min-h-[44px] rounded-2xl bg-slate-100 hover:bg-slate-200 text-slate-800 flex items-center justify-center active:scale-95 transition-transform shrink-0 cursor-pointer"
+            className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl sm:rounded-2xl bg-slate-100 hover:bg-slate-200 text-slate-800 flex items-center justify-center active:scale-95 transition-transform shrink-0 cursor-pointer"
             aria-label="Partager"
             title="Partager le profil"
           >
-            <Share2 className="w-5 h-5" />
+            <Share2 className="w-4 h-4 sm:w-5 sm:h-5" />
           </button>
         </div>
       </div>

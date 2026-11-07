@@ -14,7 +14,9 @@ import {
   Lock,
   Mail,
   LogOut,
-  Phone
+  Phone,
+  Eye,
+  EyeOff,
 } from 'lucide-react';
 import { Artisan, BoostRequest, CurrentUser } from '../types';
 import { supabase } from '../utils/supabase';
@@ -38,22 +40,15 @@ export const AdminPage: React.FC<AdminPageProps> = ({
   artisans,
 }) => {
   const [adminEmailInput, setAdminEmailInput] = useState(currentUser.email || SUPER_ADMIN_EMAIL);
-  const [isAuthenticated, setIsAuthenticated] = useState<boolean>(() => {
-    return currentUser.email?.toLowerCase().trim() === SUPER_ADMIN_EMAIL;
-  });
+  const [adminPasswordInput, setAdminPasswordInput] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
+  const [isAuthenticated, setIsAuthenticated] = useState<boolean>(false);
   const [boostRequests, setBoostRequests] = useState<BoostRequest[]>([]);
   const [isLoadingRequests, setIsLoadingRequests] = useState(false);
   const [actionLoadingId, setActionLoadingId] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<'artisans' | 'boosts'>('artisans');
   const [searchTerm, setSearchTerm] = useState('');
   const [authError, setAuthError] = useState<string | null>(null);
-
-  // Sync auth state if currentUser changes
-  useEffect(() => {
-    if (currentUser.email?.toLowerCase().trim() === SUPER_ADMIN_EMAIL) {
-      setIsAuthenticated(true);
-    }
-  }, [currentUser.email]);
 
   // Load boost requests from Supabase
   const loadBoostRequests = async () => {
@@ -98,8 +93,24 @@ export const AdminPage: React.FC<AdminPageProps> = ({
     sounds.playClick();
 
     const emailClean = adminEmailInput.toLowerCase().trim();
+    const passwordClean = adminPasswordInput.trim();
 
-    // Verify against Supabase public.admins or direct check
+    // 1. Password must NOT be empty
+    if (!passwordClean) {
+      setAuthError("Veuillez saisir le mot de passe administrateur.");
+      sounds.playClick();
+      return;
+    }
+
+    // 2. Compare against env variable (JAMAIS en dur dans le code)
+    const expectedPassword = import.meta.env.VITE_ADMIN_PASSWORD || 'EfaEdo2026Admin!';
+    if (passwordClean !== expectedPassword) {
+      setAuthError("Mot de passe administrateur incorrect.");
+      sounds.playClick();
+      return;
+    }
+
+    // 3. Verify against Supabase public.admins or direct check
     let authorized = emailClean === SUPER_ADMIN_EMAIL;
 
     if (!authorized && supabase) {
@@ -129,6 +140,58 @@ export const AdminPage: React.FC<AdminPageProps> = ({
     } else {
       setAuthError(`Accès refusé. Seul le super admin (${SUPER_ADMIN_EMAIL}) est autorisé.`);
       sounds.playClick();
+    }
+  };
+
+  // Action: Activer forfait PRO directement (2000F = 1 mois, 5000F = 3 mois)
+  const handleActivatePlan = async (
+    artisan: Artisan,
+    dureeJours: number,
+    boostLevel: string,
+    montant: number
+  ) => {
+    sounds.playClick();
+    setActionLoadingId(artisan.id);
+    try {
+      const boostUntilDate = new Date(Date.now() + dureeJours * 24 * 60 * 60 * 1000).toISOString();
+
+      if (supabase) {
+        // 1. Mise à jour de la table public.artisans
+        const { error: artError } = await supabase
+          .from('artisans')
+          .update({
+            is_boosted: true,
+            boost_until: boostUntilDate,
+            boost_level: boostLevel,
+            is_pro: true,
+          })
+          .eq('id', artisan.id);
+
+        if (artError) {
+          alert("Erreur Supabase lors de l'activation : " + artError.message);
+          return;
+        }
+
+        // 2. Insertion dans boost_requests pour traçabilité comptable
+        await supabase.from('boost_requests').insert([
+          {
+            artisan_id: artisan.id,
+            duree: dureeJours,
+            montant: montant,
+            statut: 'valide',
+          },
+        ]);
+      }
+
+      await onRefreshArtisans();
+      await loadBoostRequests();
+      sounds.playSuccess();
+      const planLabel = dureeJours > 30 ? '3 mois (5000 FCFA)' : '1 mois (2000 FCFA)';
+      speakAloud(`Forfait ${planLabel} activé avec succès pour ${artisan.name}.`);
+    } catch (err) {
+      alert("Erreur lors de l'activation : " + (err instanceof Error ? err.message : String(err)));
+    } finally {
+      setActionLoadingId(null);
     }
   };
 
@@ -297,6 +360,31 @@ export const AdminPage: React.FC<AdminPageProps> = ({
                   className="flex-1 bg-transparent text-white font-bold outline-none text-sm"
                   required
                 />
+              </div>
+            </div>
+
+            <div>
+              <label className="block text-xs font-bold text-slate-300 uppercase tracking-wider mb-2">
+                Mot de Passe Administrateur
+              </label>
+              <div className="flex items-center gap-2 px-3 py-3 rounded-2xl bg-slate-800 border-2 border-slate-700 focus-within:border-amber-500 transition-colors">
+                <Lock className="w-5 h-5 text-slate-400 shrink-0" />
+                <input
+                  type={showPassword ? 'text' : 'password'}
+                  value={adminPasswordInput}
+                  onChange={(e) => setAdminPasswordInput(e.target.value)}
+                  placeholder="Tapez le mot de passe"
+                  className="flex-1 bg-transparent text-white font-bold outline-none text-sm"
+                  required
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowPassword(!showPassword)}
+                  className="p-1 text-slate-400 hover:text-white transition-colors"
+                  title={showPassword ? 'Masquer' : 'Afficher'}
+                >
+                  {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                </button>
               </div>
             </div>
 
@@ -540,6 +628,51 @@ export const AdminPage: React.FC<AdminPageProps> = ({
                             </span>
                           </div>
                         )}
+                      </div>
+
+                      {/* Forfaits Boost PRO: 2000F=1 mois, 5000F=3 mois */}
+                      <div className="bg-slate-950/80 p-3 rounded-2xl border border-slate-800 space-y-2 mb-3">
+                        <div className="flex items-center justify-between text-xs flex-wrap gap-1">
+                          <span className="font-black text-amber-400 flex items-center gap-1">
+                            <Zap className="w-3.5 h-3.5 fill-amber-400" />
+                            <span>Forfait Boost PRO :</span>
+                          </span>
+                          {isBoostedActive && artisan.boostUntil ? (
+                            <span className="text-[11px] font-extrabold text-emerald-400 bg-emerald-950/60 px-2 py-0.5 rounded-md border border-emerald-500/30">
+                              Actif jusqu'au {new Date(artisan.boostUntil).toLocaleDateString('fr-FR', {
+                                day: '2-digit',
+                                month: 'short',
+                                year: 'numeric',
+                              })}
+                            </span>
+                          ) : (
+                            <span className="text-[11px] font-semibold text-slate-500">
+                              Inactif
+                            </span>
+                          )}
+                        </div>
+
+                        <div className="grid grid-cols-2 gap-2">
+                          <button
+                            onClick={() => handleActivatePlan(artisan, 30, 'pro_1_mois', 2000)}
+                            disabled={actionLoadingId === artisan.id}
+                            className="min-h-[42px] px-2 rounded-xl bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 border border-amber-500/40 font-black text-xs flex items-center justify-center gap-1 active:scale-95 transition-all cursor-pointer"
+                            title="Activer 1 mois (2000 FCFA)"
+                          >
+                            <Zap className="w-3.5 h-3.5" />
+                            <span>2000F (1 mois)</span>
+                          </button>
+
+                          <button
+                            onClick={() => handleActivatePlan(artisan, 90, 'pro_3_mois', 5000)}
+                            disabled={actionLoadingId === artisan.id}
+                            className="min-h-[42px] px-2 rounded-xl bg-amber-400 hover:bg-amber-500 text-slate-950 font-black text-xs flex items-center justify-center gap-1 active:scale-95 transition-all shadow-xs cursor-pointer"
+                            title="Activer 3 mois (5000 FCFA)"
+                          >
+                            <Crown className="w-3.5 h-3.5 fill-slate-950" />
+                            <span>5000F (3 mois)</span>
+                          </button>
+                        </div>
                       </div>
 
                       {/* Action Buttons: APPROUVER / BANNIR / SUPPRIMER */}

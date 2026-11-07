@@ -264,6 +264,9 @@ export default function App() {
             dailyViews: Number(item.dailyViews ?? item.daily_views ?? 0),
             dailyCalls: Number(item.dailyCalls ?? item.daily_calls ?? 0),
             registeredAt: item.registeredAt || item.registered_at || item.created_at,
+            secondPhone: item.second_phone || item.secondPhone || '',
+            locality: item.locality || '',
+            lastProfileUpdate: item.last_profile_update || item.lastProfileUpdate || null,
           };
         });
         setArtisans(mapped);
@@ -297,9 +300,19 @@ export default function App() {
     }
   }, [currentUser]);
 
-  // Find artisan profile associated with current user
+  // User's own artisan record if registered
+  const userArtisanRecord = currentUser.artisanId
+    ? artisans.find((a) => a.id === currentUser.artisanId)
+    : undefined;
+  const hasArtisanProfile = Boolean(userArtisanRecord);
   const currentArtisanProfile =
-    artisans.find((a) => a.id === currentUser.artisanId) || artisans[0];
+    userArtisanRecord || (currentUser.role === 'artisan' && artisans.length > 0 ? artisans[0] : null);
+
+  const handleStartArtisanRegistration = () => {
+    sounds.playClick();
+    speakAloud("Devenir Artisan EDO. Remplis tes informations et importe tes photos pour recevoir des clients.");
+    setHasCompletedOnboarding(false);
+  };
 
   // Handler: Save custom trade name when artisan selects "Autre"
   const handleSaveCustomTrade = (tradeName: string) => {
@@ -380,6 +393,9 @@ export default function App() {
             avatar: user.avatar || '',
             cover_image: '',
             work_photos: artisanData.workPhotos || [],
+            second_phone: '',
+            locality: '',
+            last_profile_update: new Date().toISOString(),
           },
         ])
         .select()
@@ -536,6 +552,8 @@ export default function App() {
         currentUser={currentUser}
         currentRole={currentRole}
         isAdmin={isSuperAdmin}
+        hasArtisanProfile={hasArtisanProfile}
+        onBecomeArtisan={handleStartArtisanRegistration}
         onOpenAdminPage={handleOpenAdminView}
         onSwitchRole={(newRole) => {
           setCurrentRole(newRole);
@@ -681,6 +699,9 @@ export default function App() {
                   onToggleStatus={handleToggleArtisanStatus}
                   onOpenProModal={() => setShowProModal(true)}
                   onViewPublicProfile={(artisan) => setSelectedArtisanProfile(artisan)}
+                  onUpdateArtisan={(updated) => {
+                    setArtisans((prev) => prev.map((a) => (a.id === updated.id ? updated : a)));
+                  }}
                 />
               ) : (
                 <div className="bg-white p-8 rounded-3xl border border-slate-200 text-center max-w-lg mx-auto my-6">

@@ -71,6 +71,9 @@ export interface Artisan {
   dailyViews: number;
   dailyCalls: number;
   registeredAt?: string;
+  secondPhone?: string;
+  locality?: string;
+  lastProfileUpdate?: string | null;
 }
 
 export interface BoostRequest {

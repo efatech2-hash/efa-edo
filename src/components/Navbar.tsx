@@ -14,7 +14,9 @@ interface NavbarProps {
   currentUser: CurrentUser;
   currentRole: UserRole;
   isAdmin?: boolean;
+  hasArtisanProfile?: boolean;
   onSwitchRole: (role: UserRole) => void;
+  onBecomeArtisan?: () => void;
   onRestartOnboarding: () => void;
   onOpenVoiceGuide: () => void;
   onOpenAdminTrades?: () => void;
@@ -26,7 +28,9 @@ export const Navbar: React.FC<NavbarProps> = ({
   currentUser,
   currentRole,
   isAdmin = false,
+  hasArtisanProfile = false,
   onSwitchRole,
+  onBecomeArtisan,
   onRestartOnboarding,
   onOpenVoiceGuide,
   onOpenAdminTrades,
@@ -44,14 +48,23 @@ export const Navbar: React.FC<NavbarProps> = ({
 
   const handleRoleToggle = () => {
     sounds.playClick();
-    const nextRole = currentRole === 'client' ? 'artisan' : 'client';
-    onSwitchRole(nextRole);
-    setIsMobileMenuOpen(false);
-    speakAloud(
-      nextRole === 'client'
-        ? "Mode Client activé. Vous pouvez chercher et appeler des artisans."
-        : "Mode Artisan activé. Gérez votre disponibilité et vos appels."
-    );
+    if (currentRole === 'client') {
+      if (hasArtisanProfile) {
+        onSwitchRole('artisan');
+        setIsMobileMenuOpen(false);
+        speakAloud("Mode Artisan activé. Gérez votre atelier et vos appels.");
+      } else if (onBecomeArtisan) {
+        setIsMobileMenuOpen(false);
+        onBecomeArtisan();
+      } else {
+        onSwitchRole('artisan');
+        setIsMobileMenuOpen(false);
+      }
+    } else {
+      onSwitchRole('client');
+      setIsMobileMenuOpen(false);
+      speakAloud("Mode Client activé. Vous pouvez chercher et appeler des artisans.");
+    }
   };
 
   return (
@@ -134,16 +147,27 @@ export const Navbar: React.FC<NavbarProps> = ({
             <span>Voix</span>
           </button>
 
-          {/* Switch Role Button */}
+          {/* Switch Role / Devenir Artisan Button */}
           <button
             onClick={handleRoleToggle}
-            className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-white text-xs font-extrabold border border-slate-700 active:scale-95 transition-transform"
+            className={`flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-black shadow-xs active:scale-95 transition-transform cursor-pointer ${
+              currentRole === 'client' && !hasArtisanProfile
+                ? 'bg-amber-500 hover:bg-amber-400 text-slate-950'
+                : 'bg-slate-800 hover:bg-slate-700 text-white border border-slate-700'
+            }`}
           >
             {currentRole === 'client' ? (
-              <>
-                <Hammer className="w-3.5 h-3.5 text-amber-400" />
-                <span>Mode Artisan</span>
-              </>
+              hasArtisanProfile ? (
+                <>
+                  <Hammer className="w-3.5 h-3.5 text-amber-400" />
+                  <span>Mode Artisan</span>
+                </>
+              ) : (
+                <>
+                  <Hammer className="w-3.5 h-3.5 fill-slate-950" />
+                  <span>Devenir Artisan</span>
+                </>
+              )
             ) : (
               <>
                 <User className="w-3.5 h-3.5 text-emerald-400" />
@@ -230,10 +254,10 @@ export const Navbar: React.FC<NavbarProps> = ({
             </span>
           </div>
 
-          {/* Mode Switcher Button */}
+          {/* Mode Switcher / Devenir Artisan Button */}
           <button
             onClick={handleRoleToggle}
-            className={`w-full min-h-[50px] rounded-2xl font-black text-sm flex items-center justify-between px-4 shadow-sm active:scale-[0.98] transition-all ${
+            className={`w-full min-h-[50px] rounded-2xl font-black text-sm flex items-center justify-between px-4 shadow-sm active:scale-[0.98] transition-all cursor-pointer ${
               currentRole === 'client'
                 ? 'bg-amber-400 hover:bg-amber-500 text-slate-950'
                 : 'bg-emerald-600 hover:bg-emerald-700 text-white'
@@ -241,18 +265,20 @@ export const Navbar: React.FC<NavbarProps> = ({
           >
             <div className="flex items-center gap-2.5">
               {currentRole === 'client' ? (
-                <Hammer className="w-5 h-5" />
+                <Hammer className="w-5 h-5 fill-slate-950" />
               ) : (
                 <User className="w-5 h-5" />
               )}
               <span>
                 {currentRole === 'client'
-                  ? 'Passer en Mode Artisan'
+                  ? hasArtisanProfile
+                    ? 'Passer en Mode Artisan'
+                    : 'Devenir Artisan EDO'
                   : 'Passer en Mode Client'}
               </span>
             </div>
             <span className="text-xs font-extrabold uppercase opacity-80">
-              Basculer
+              {currentRole === 'client' && !hasArtisanProfile ? 'Inscription' : 'Basculer'}
             </span>
           </button>
 

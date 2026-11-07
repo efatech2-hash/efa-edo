@@ -36,6 +36,9 @@ ALTER TABLE public.artisans ADD COLUMN IF NOT EXISTS is_boosted boolean default 
 ALTER TABLE public.artisans ADD COLUMN IF NOT EXISTS boost_until timestamptz;
 ALTER TABLE public.artisans ADD COLUMN IF NOT EXISTS boost_level text;
 ALTER TABLE public.artisans ADD COLUMN IF NOT EXISTS status text default 'approuve';
+ALTER TABLE public.artisans ADD COLUMN IF NOT EXISTS second_phone text;
+ALTER TABLE public.artisans ADD COLUMN IF NOT EXISTS locality text;
+ALTER TABLE public.artisans ADD COLUMN IF NOT EXISTS last_profile_update timestamptz;
 
 -- Activation de Row Level Security (RLS) sur artisans
 alter table public.artisans enable row level security;
