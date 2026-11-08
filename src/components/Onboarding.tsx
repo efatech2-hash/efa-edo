@@ -14,13 +14,17 @@ import {
   Navigation,
   Upload,
   Trash2,
-  Image as ImageIcon
+  Image as ImageIcon,
+  LogIn,
+  UserPlus,
+  Building,
 } from 'lucide-react';
 import { CurrentUser, GeoCoordinates } from '../types';
 import { CATEGORIES_DATA } from '../data/categories';
 import { TradeIcon } from './TradeIcon';
 import { speakAloud, sounds } from '../utils/audio';
 import { requestDeviceCoordinates } from '../utils/geo';
+import { supabase } from '../utils/supabase';
 
 export const COUNTRY_CODES = [
   { code: '+228', country: 'Togo', flag: '🇹🇬' },
@@ -65,7 +69,17 @@ export const Onboarding: React.FC<OnboardingProps> = ({
   onSaveCustomTrade,
   initialCoords,
 }) => {
-  const [step, setStep] = useState<1 | 2 | 3 | 4>(1);
+  // Navigation:
+  // step 1: Role Selection ("Je suis Artisan / Professionnel" vs "Je suis Client")
+  // step 'auth_choice': 2 Boutons ("J'ai déjà un compte" vs "Je suis nouveau")
+  // step 'login': Existing Account form
+  // step 2: New account WhatsApp verification (with Anti-Double)
+  // step 3: Artisan trades
+  // step 4: Artisan workshop info + GPS + photos (max 5)
+  const [currentView, setCurrentView] = useState<
+    'role_select' | 'auth_choice' | 'login' | 'register_phone' | 'trades' | 'workshop'
+  >('role_select');
+
   const [role, setRole] = useState<'client' | 'artisan'>('client');
   const [countryCode, setCountryCode] = useState('+228');
   const [phone, setPhone] = useState('');
@@ -73,18 +87,20 @@ export const Onboarding: React.FC<OnboardingProps> = ({
   const [otpCode, setOtpCode] = useState('');
   const [expectedOtp, setExpectedOtp] = useState<string>('');
 
-  // Artisan specific
+  // Login specific states
+  const [loginAtelierName, setLoginAtelierName] = useState('');
+  const [isSearchingAccount, setIsSearchingAccount] = useState(false);
+
+  // Artisan registration specific
   const [selectedTrades, setSelectedTrades] = useState<string[]>(['Menuisier Bois']);
   const [customTradeInput, setCustomTradeInput] = useState('');
   const [name, setName] = useState('');
   const [addressDetail, setAddressDetail] = useState('');
-  const [coords, setCoords] = useState<GeoCoordinates | null>(
-    initialCoords || null
-  );
+  const [coords, setCoords] = useState<GeoCoordinates | null>(initialCoords || null);
   const [hasDetectedGps, setHasDetectedGps] = useState(!!initialCoords);
   const [isGpsLoading, setIsGpsLoading] = useState(false);
 
-  // Photos réelles importées par l'artisan (0 photo démo)
+  // Photos réelles importées par l'artisan (0 photo démo, max 5 portfolio)
   const [avatar, setAvatar] = useState<string>('');
   const [workPhotos, setWorkPhotos] = useState<string[]>([]);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -92,33 +108,245 @@ export const Onboarding: React.FC<OnboardingProps> = ({
   // Audio guide explanation
   const explainStep = () => {
     sounds.playClick();
-    if (step === 1) {
-      speakAloud("Bienvenue sur EFA EDO. Tu cherches un artisan pour faire un travail, ou bien tu es artisan pour trouver des clients ? Choisis ton rôle.");
-    } else if (step === 2) {
+    if (currentView === 'role_select') {
+      speakAloud("Bienvenue sur EFA EDO. Choisis ton rôle : Tu es Artisan Professionnel, ou tu es Client ?");
+    } else if (currentView === 'auth_choice') {
+      speakAloud("As-tu déjà un compte enregistré sur EFA EDO, ou bien es-tu nouveau ? Choisis ton option.");
+    } else if (currentView === 'login') {
+      if (role === 'artisan') {
+        speakAloud("Pour vous connecter à votre atelier, tapez le nom de votre atelier ou votre nom, et votre numéro WhatsApp.");
+      } else {
+        speakAloud("Pour vous connecter, tapez simplement votre numéro WhatsApp.");
+      }
+    } else if (currentView === 'register_phone') {
       speakAloud("Choisis l'indicatif de ton pays puis tape ton numéro WhatsApp. Tu recevras un code à 4 chiffres à saisir.");
-    } else if (step === 3) {
-      speakAloud("Quel est ton métier ? Tu peux choisir un ou plusieurs métiers ou sélectionner Autre pour écrire ton propre métier.");
-    } else if (step === 4) {
-      speakAloud("Donne le nom de ton atelier, actualise ta position GPS exacte, et importe tes propres photos depuis ta galerie.");
+    } else if (currentView === 'trades') {
+      speakAloud("Quel est ton métier ? Tu peux choisir 1 à 3 métiers ou sélectionner Autre pour écrire ton propre métier.");
+    } else if (currentView === 'workshop') {
+      speakAloud("Donne le nom de ton atelier, actualise ta position GPS exacte, et importe tes propres photos. Maximum 5 photos pour le portfolio.");
     }
   };
 
+  // Role select handler
   const handleSelectRole = (chosenRole: 'client' | 'artisan') => {
     sounds.playClick();
     setRole(chosenRole);
     if (chosenRole === 'client') {
       setName('Client EFA');
     }
-    setStep(2);
+    // Directement vers les 2 choix : "J'ai déjà un compte" / "Je suis nouveau"
+    setCurrentView('auth_choice');
   };
 
-  const handleSendOtp = () => {
+  // 3. ARTISAN : "J'ai déjà un compte" -> Login check in Supabase
+  const handleArtisanLogin = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const cleanPhone = phone.replace(/\D/g, '');
+    const cleanName = loginAtelierName.trim().toLowerCase();
+
+    if (!cleanName) {
+      alert("Veuillez saisir le nom de votre atelier ou votre nom.");
+      return;
+    }
+    if (!cleanPhone || cleanPhone.length < 6) {
+      alert("Veuillez saisir votre numéro WhatsApp.");
+      return;
+    }
+
+    setIsSearchingAccount(true);
+    sounds.playClick();
+
+    try {
+      if (!supabase) {
+        alert("Erreur : Service de connexion temporairement indisponible.");
+        setIsSearchingAccount(false);
+        return;
+      }
+
+      const { data, error } = await supabase.from('artisans').select('*');
+      if (error) {
+        alert("Erreur : " + error.message);
+        setIsSearchingAccount(false);
+        return;
+      }
+
+      // Match artisan by phone + name
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const match = (data || []).find((a: any) => {
+        const artisanPhone = (a.phone || '').replace(/\D/g, '');
+        const artisanWa = (a.whatsapp || '').replace(/\D/g, '');
+        const phoneMatch = artisanPhone.includes(cleanPhone) || artisanWa.includes(cleanPhone);
+
+        const aName = (a.name || '').toLowerCase();
+        const aAddress = (a.address_detail || '').toLowerCase();
+        const nameMatch =
+          aName.includes(cleanName) ||
+          cleanName.includes(aName) ||
+          aAddress.includes(cleanName);
+
+        return phoneMatch && nameMatch;
+      });
+
+      if (match) {
+        sounds.playSuccess();
+        speakAloud(`Bon retour ${match.name}. Votre profil artisan est ouvert !`);
+        const artisanUser: CurrentUser = {
+          id: String(match.id),
+          artisanId: String(match.id),
+          role: 'artisan',
+          phone: match.phone || `${countryCode} ${cleanPhone}`,
+          name: match.name,
+          avatar: match.avatar || '',
+          addressDetail: match.address_detail || '',
+          lat: match.lat !== null && match.lat !== undefined ? Number(match.lat) : undefined,
+          lng: match.lng !== null && match.lng !== undefined ? Number(match.lng) : undefined,
+          isOnline: match.is_online ?? true,
+          isPro: Boolean(match.is_pro ?? false),
+        };
+        onComplete(artisanUser);
+      } else {
+        alert("Erreur : Aucun atelier trouvé correspondant à ce nom et ce numéro WhatsApp. Vérifiez vos identifiants ou cliquez sur 'Je suis nouveau' pour vous inscrire.");
+      }
+    } catch (err) {
+      alert("Erreur : " + (err instanceof Error ? err.message : String(err)));
+    } finally {
+      setIsSearchingAccount(false);
+    }
+  };
+
+  // 4. CLIENT : "J'ai déjà un compte" -> Login check in Supabase
+  const handleClientLogin = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const cleanPhone = phone.replace(/\D/g, '');
+
+    if (!cleanPhone || cleanPhone.length < 6) {
+      alert("Veuillez saisir votre numéro WhatsApp.");
+      return;
+    }
+
+    setIsSearchingAccount(true);
+    sounds.playClick();
+
+    try {
+      if (!supabase) {
+        alert("Erreur : Service de connexion temporairement indisponible.");
+        setIsSearchingAccount(false);
+        return;
+      }
+
+      let foundClient: { id: string; name: string; phone: string } | null = null;
+
+      // Check in clients table
+      try {
+        const { data: clientsData } = await supabase.from('clients').select('*');
+        if (Array.isArray(clientsData)) {
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          const match = clientsData.find((c: any) =>
+            (c.phone || '').replace(/\D/g, '').includes(cleanPhone)
+          );
+          if (match) {
+            foundClient = {
+              id: String(match.id),
+              name: match.name || 'Client EDO',
+              phone: match.phone,
+            };
+          }
+        }
+      } catch {
+        // continue search
+      }
+
+      // If not in clients table, check if registered as artisan
+      if (!foundClient) {
+        const { data: artisansData } = await supabase.from('artisans').select('*');
+        if (Array.isArray(artisansData)) {
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          const match = artisansData.find((a: any) => {
+            const p = (a.phone || '').replace(/\D/g, '');
+            const w = (a.whatsapp || '').replace(/\D/g, '');
+            return p.includes(cleanPhone) || w.includes(cleanPhone);
+          });
+          if (match) {
+            foundClient = {
+              id: String(match.id),
+              name: match.name || 'Client EDO',
+              phone: match.phone || `${countryCode} ${cleanPhone}`,
+            };
+          }
+        }
+      }
+
+      if (foundClient) {
+        sounds.playSuccess();
+        speakAloud(`Bon retour ${foundClient.name}. Vous êtes connecté.`);
+        const clientUser: CurrentUser = {
+          id: foundClient.id,
+          role: 'client',
+          phone: foundClient.phone,
+          name: foundClient.name,
+        };
+        onComplete(clientUser);
+      } else {
+        alert("Erreur : Aucun compte client trouvé avec ce numéro WhatsApp. Cliquez sur 'Je suis nouveau' pour vous inscrire en 30 secondes.");
+      }
+    } catch (err) {
+      alert("Erreur : " + (err instanceof Error ? err.message : String(err)));
+    } finally {
+      setIsSearchingAccount(false);
+    }
+  };
+
+  // 5. ANTI-DOUBLE : 1 numéro WhatsApp = 1 seul compte
+  const handleSendOtp = async () => {
     const cleanPhone = phone.replace(/\D/g, '');
     if (!cleanPhone || cleanPhone.length < 6) {
       alert("Veuillez saisir un numéro de téléphone valide sans l'indicatif.");
       return;
     }
+
+    setIsSubmitting(true);
     sounds.playClick();
+
+    // Check anti-double in Supabase before sending OTP
+    try {
+      if (supabase) {
+        const [artisansCheck, clientsCheck] = await Promise.all([
+          supabase.from('artisans').select('id, phone, whatsapp'),
+          supabase.from('clients').select('id, phone'),
+        ]);
+
+        let alreadyRegistered = false;
+
+        if (Array.isArray(artisansCheck.data)) {
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          alreadyRegistered = artisansCheck.data.some((a: any) => {
+            const p = (a.phone || '').replace(/\D/g, '');
+            const w = (a.whatsapp || '').replace(/\D/g, '');
+            return p.includes(cleanPhone) || w.includes(cleanPhone);
+          });
+        }
+
+        if (!alreadyRegistered && Array.isArray(clientsCheck.data)) {
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          alreadyRegistered = clientsCheck.data.some((c: any) => {
+            const p = (c.phone || '').replace(/\D/g, '');
+            return p.includes(cleanPhone);
+          });
+        }
+
+        if (alreadyRegistered) {
+          alert("Ce numéro WhatsApp possède déjà un compte. Utilisez l'option 'J'ai déjà un compte' pour vous connecter.");
+          setIsSubmitting(false);
+          return;
+        }
+      }
+    } catch {
+      // Continue if offline
+    } finally {
+      setIsSubmitting(false);
+    }
+
+    // Code OTP generation
     const code = Math.floor(1000 + Math.random() * 9000).toString();
     setExpectedOtp(code);
     setOtpSent(true);
@@ -126,7 +354,9 @@ export const Onboarding: React.FC<OnboardingProps> = ({
 
     // Envoi du vrai code via lien WhatsApp officiel
     const fullNumber = `${countryCode.replace('+', '')}${cleanPhone}`;
-    const waUrl = `https://wa.me/${fullNumber}?text=${encodeURIComponent(`Votre code de confirmation EFA EDO est : ${code}`)}`;
+    const waUrl = `https://wa.me/${fullNumber}?text=${encodeURIComponent(
+      `Votre code de confirmation EFA EDO est : ${code}`
+    )}`;
     try {
       window.open(waUrl, '_blank');
     } catch {
@@ -136,7 +366,8 @@ export const Onboarding: React.FC<OnboardingProps> = ({
     speakAloud(`Votre code de confirmation WhatsApp a été généré. Tapez le code à 4 chiffres reçu pour continuer.`);
   };
 
-  const handleVerifyOtp = () => {
+  // OTP Verification
+  const handleVerifyOtp = async () => {
     sounds.playClick();
     if (otpCode.length < 4) {
       alert("Veuillez saisir le code à 4 chiffres reçu.");
@@ -155,12 +386,29 @@ export const Onboarding: React.FC<OnboardingProps> = ({
         lat: coords ? coords.lat : undefined,
         lng: coords ? coords.lng : undefined,
       };
+
+      // Save client in clients table
+      if (supabase) {
+        try {
+          await supabase.from('clients').insert([
+            {
+              id: clientUser.id,
+              phone: fullPhoneNumber,
+              name: clientUser.name,
+            },
+          ]);
+        } catch {
+          // fallback
+        }
+      }
+
       onComplete(clientUser);
     } else {
-      setStep(3);
+      setCurrentView('trades');
     }
   };
 
+  // Trades selection (1-3 trades)
   const toggleTrade = (tradeName: string) => {
     sounds.playClick();
     if (selectedTrades.includes(tradeName)) {
@@ -168,7 +416,6 @@ export const Onboarding: React.FC<OnboardingProps> = ({
         setSelectedTrades(selectedTrades.filter((t) => t !== tradeName));
       }
     } else {
-      // Autoriser 2 à 3 métiers
       if (selectedTrades.length < 3) {
         setSelectedTrades([...selectedTrades, tradeName]);
       } else {
@@ -195,14 +442,13 @@ export const Onboarding: React.FC<OnboardingProps> = ({
     }
   };
 
-  // Trigger GPS detection when reaching Step 4 for artisans
   useEffect(() => {
-    if (step === 4 && !hasDetectedGps) {
+    if (currentView === 'workshop' && !hasDetectedGps) {
       handleDetectGps();
     }
-  }, [step]);
+  }, [currentView]);
 
-  // Upload Photo de Profil depuis la Galerie
+  // Upload Photo de Profil (Galerie)
   const handleAvatarUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -217,16 +463,25 @@ export const Onboarding: React.FC<OnboardingProps> = ({
     reader.readAsDataURL(file);
   };
 
-  // Upload Photos Portfolio depuis la Galerie
+  // 1. PORTFOLIO MAX 5 : max 5 photos. 6ème = refuse + message "Maximum 5 photos"
   const handleWorkPhotosUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files;
     if (!files || files.length === 0) return;
+
+    if (workPhotos.length >= 5 || workPhotos.length + files.length > 5) {
+      alert("Maximum 5 photos");
+      return;
+    }
+
     sounds.playClick();
     Array.from(files).forEach((file) => {
       const reader = new FileReader();
       reader.onload = () => {
         if (typeof reader.result === 'string') {
-          setWorkPhotos((prev) => [...prev, reader.result as string]);
+          setWorkPhotos((prev) => {
+            if (prev.length >= 5) return prev;
+            return [...prev, reader.result as string];
+          });
         }
       };
       reader.readAsDataURL(file);
@@ -239,18 +494,18 @@ export const Onboarding: React.FC<OnboardingProps> = ({
     setWorkPhotos((prev) => prev.filter((_, i) => i !== index));
   };
 
+  // Finish Artisan Registration
   const handleFinishArtisan = async () => {
     setIsSubmitting(true);
     try {
       sounds.playSuccess();
 
-      // Determine primary trade name
       const isOther = selectedTrades.includes('Autre');
-      const effectiveTrade = isOther && customTradeInput.trim()
-        ? customTradeInput.trim()
-        : selectedTrades[0] || 'Artisan';
+      const effectiveTrade =
+        isOther && customTradeInput.trim()
+          ? customTradeInput.trim()
+          : selectedTrades[0] || 'Artisan';
 
-      // Save custom trade for admin list
       if (isOther && customTradeInput.trim() && onSaveCustomTrade) {
         onSaveCustomTrade(customTradeInput.trim());
       }
@@ -274,7 +529,7 @@ export const Onboarding: React.FC<OnboardingProps> = ({
         trade: effectiveTrade,
         customTradeName: isOther ? customTradeInput.trim() : undefined,
         additionalTrades: selectedTrades.filter((t) => t !== 'Autre' && t !== effectiveTrade),
-        workPhotos: workPhotos,
+        workPhotos: workPhotos.slice(0, 5),
         addressDetail: addressDetail.trim() || '',
         lat: coords ? coords.lat : null,
         lng: coords ? coords.lng : null,
@@ -290,16 +545,20 @@ export const Onboarding: React.FC<OnboardingProps> = ({
     <div className="min-h-screen bg-slate-50 flex flex-col justify-between max-w-xl mx-auto px-4 py-6">
       {/* Top Bar with Audio Assistant */}
       <div className="flex items-center justify-between gap-4 mb-4">
-        {step > 1 ? (
+        {currentView !== 'role_select' ? (
           <button
             onClick={() => {
               sounds.playClick();
-              setStep((s) => (s - 1) as 1 | 2 | 3 | 4);
+              if (currentView === 'auth_choice') setCurrentView('role_select');
+              else if (currentView === 'login') setCurrentView('auth_choice');
+              else if (currentView === 'register_phone') setCurrentView('auth_choice');
+              else if (currentView === 'trades') setCurrentView('register_phone');
+              else if (currentView === 'workshop') setCurrentView('trades');
             }}
-            className="w-12 h-12 flex items-center justify-center rounded-2xl bg-white border border-slate-200 text-slate-700 shadow-xs active:scale-95 transition-transform cursor-pointer"
+            className="w-11 h-11 flex items-center justify-center rounded-2xl bg-white border border-slate-200 text-slate-700 shadow-xs active:scale-95 transition-transform cursor-pointer"
             aria-label="Retour"
           >
-            <ArrowLeft className="w-6 h-6" />
+            <ArrowLeft className="w-5 h-5" />
           </button>
         ) : onCancel ? (
           <button
@@ -309,28 +568,36 @@ export const Onboarding: React.FC<OnboardingProps> = ({
             Passer
           </button>
         ) : (
-          <div className="w-12" />
+          <div className="w-11" />
         )}
 
         <div className="text-center">
           <span className="text-xs font-bold uppercase tracking-wider text-amber-600 bg-amber-50 px-3 py-1 rounded-full border border-amber-200">
-            Étape {step} sur {role === 'client' ? 2 : 4}
+            {currentView === 'role_select'
+              ? 'Accueil'
+              : currentView === 'auth_choice'
+              ? role === 'artisan'
+                ? 'Artisan'
+                : 'Client'
+              : currentView === 'login'
+              ? 'Connexion'
+              : 'Inscription'}
           </span>
         </div>
 
         {/* Audio Read button */}
         <button
           onClick={explainStep}
-          className="flex items-center gap-2 px-3 py-2 rounded-2xl bg-amber-400 hover:bg-amber-500 text-slate-950 font-bold shadow-xs active:scale-95 transition-transform cursor-pointer"
+          className="flex items-center gap-1.5 px-3 py-2 rounded-2xl bg-amber-400 hover:bg-amber-500 text-slate-950 font-bold shadow-xs active:scale-95 transition-transform cursor-pointer"
           title="Écouter les explications en voix"
         >
-          <Volume2 className="w-5 h-5" />
+          <Volume2 className="w-4 h-4" />
           <span className="text-xs font-bold">Écouter</span>
         </button>
       </div>
 
-      {/* Screen 1: Role choice */}
-      {step === 1 && (
+      {/* SCREEN 1: 2 CHOIX -> "Je suis Artisan / Professionnel" vs "Je suis Client" */}
+      {currentView === 'role_select' && (
         <div className="flex-1 flex flex-col justify-center">
           <div className="text-center mb-8">
             <img
@@ -342,34 +609,12 @@ export const Onboarding: React.FC<OnboardingProps> = ({
               Bienvenue sur <span className="text-amber-600">EFA EDO</span>
             </h1>
             <p className="text-lg text-slate-600 font-medium">
-              Tu es ?
+              Choisissez votre profil :
             </p>
           </div>
 
           <div className="grid grid-cols-1 gap-5 mb-8">
-            {/* Card 1: Cherche un artisan */}
-            <button
-              onClick={() => handleSelectRole('client')}
-              className="flex items-center gap-5 p-6 rounded-3xl bg-white border-3 border-slate-200 hover:border-amber-500 text-left shadow-sm hover:shadow-md active:scale-[0.98] transition-all group cursor-pointer"
-            >
-              <div className="w-20 h-20 rounded-2xl bg-amber-100 flex items-center justify-center text-amber-700 shrink-0 group-hover:scale-105 transition-transform">
-                <User className="w-10 h-10" />
-              </div>
-              <div className="flex-1">
-                <span className="text-xs font-bold uppercase tracking-wider text-slate-400">
-                  Client
-                </span>
-                <h2 className="text-2xl font-black text-slate-900 group-hover:text-amber-600 transition-colors">
-                  Je CHERCHE un artisan
-                </h2>
-                <p className="text-slate-500 text-base font-medium mt-1">
-                  Trouve un pro près de toi par GPS en 30 secondes
-                </p>
-              </div>
-              <ChevronRight className="w-8 h-8 text-slate-300 group-hover:text-amber-600 transition-colors shrink-0" />
-            </button>
-
-            {/* Card 2: Je SUIS artisan */}
+            {/* Card 1: Je suis Artisan / Professionnel */}
             <button
               onClick={() => handleSelectRole('artisan')}
               className="flex items-center gap-5 p-6 rounded-3xl bg-slate-900 border-3 border-slate-900 hover:border-amber-400 text-left shadow-md hover:shadow-lg active:scale-[0.98] transition-all text-white group cursor-pointer"
@@ -382,31 +627,213 @@ export const Onboarding: React.FC<OnboardingProps> = ({
                   Professionnel
                 </span>
                 <h2 className="text-2xl font-black text-white group-hover:text-amber-300 transition-colors">
-                  Je SUIS artisan
+                  Je suis Artisan / Professionnel
                 </h2>
                 <p className="text-slate-300 text-base font-medium mt-1">
-                  Reçois des appels de clients proches de ton atelier
+                  Trouve des chantiers & reçois des appels de clients autour de toi
                 </p>
               </div>
               <ChevronRight className="w-8 h-8 text-amber-400 shrink-0" />
             </button>
+
+            {/* Card 2: Je suis Client */}
+            <button
+              onClick={() => handleSelectRole('client')}
+              className="flex items-center gap-5 p-6 rounded-3xl bg-white border-3 border-slate-200 hover:border-amber-500 text-left shadow-sm hover:shadow-md active:scale-[0.98] transition-all group cursor-pointer"
+            >
+              <div className="w-20 h-20 rounded-2xl bg-amber-100 flex items-center justify-center text-amber-700 shrink-0 group-hover:scale-105 transition-transform">
+                <User className="w-10 h-10" />
+              </div>
+              <div className="flex-1">
+                <span className="text-xs font-bold uppercase tracking-wider text-slate-400">
+                  Client Particulier
+                </span>
+                <h2 className="text-2xl font-black text-slate-900 group-hover:text-amber-600 transition-colors">
+                  Je suis Client
+                </h2>
+                <p className="text-slate-500 text-base font-medium mt-1">
+                  Trouve un artisan pro près de toi par GPS en 30 secondes
+                </p>
+              </div>
+              <ChevronRight className="w-8 h-8 text-slate-300 group-hover:text-amber-600 transition-colors shrink-0" />
+            </button>
           </div>
 
           <div className="text-center text-slate-500 text-sm font-medium">
-            EFA EDO · EFA TECHNOLOGIE
+            EFA EDO · Marketplace des Artisans Africains
           </div>
         </div>
       )}
 
-      {/* Screen 2: Country Code Selector + Phone + Manual OTP */}
-      {step === 2 && (
+      {/* SCREEN 1-B: 2 BOUTONS -> "J'ai déjà un compte" vs "Je suis nouveau" */}
+      {currentView === 'auth_choice' && (
+        <div className="flex-1 flex flex-col justify-center">
+          <div className="text-center mb-6">
+            <div
+              className={`w-16 h-16 rounded-3xl flex items-center justify-center mx-auto mb-3 shadow-xs ${
+                role === 'artisan'
+                  ? 'bg-amber-100 text-amber-700'
+                  : 'bg-emerald-100 text-emerald-700'
+              }`}
+            >
+              {role === 'artisan' ? <Hammer className="w-8 h-8" /> : <User className="w-8 h-8" />}
+            </div>
+            <h2 className="text-2xl font-black text-slate-900">
+              {role === 'artisan' ? 'Espace Artisan & Atelier' : 'Espace Client'}
+            </h2>
+            <p className="text-sm font-semibold text-slate-600 mt-1">
+              {role === 'artisan'
+                ? 'Connecte-toi à ton atelier ou inscris un nouvel atelier'
+                : 'Connecte-toi avec ton WhatsApp ou crée ton profil'}
+            </p>
+          </div>
+
+          <div className="space-y-4 mb-6">
+            {/* Bouton 1 : J'ai déjà un compte */}
+            <button
+              onClick={() => {
+                sounds.playClick();
+                setCurrentView('login');
+              }}
+              className="w-full p-5 rounded-3xl bg-white border-2 border-slate-200 hover:border-amber-500 text-left shadow-sm active:scale-[0.98] transition-all flex items-center justify-between group cursor-pointer"
+            >
+              <div className="flex items-center gap-4">
+                <div className="w-14 h-14 rounded-2xl bg-amber-50 text-amber-600 flex items-center justify-center shrink-0">
+                  <LogIn className="w-7 h-7" />
+                </div>
+                <div>
+                  <h3 className="font-black text-xl text-slate-900 group-hover:text-amber-600 transition-colors">
+                    J'ai déjà un compte
+                  </h3>
+                  <p className="text-xs font-semibold text-slate-500 mt-0.5">
+                    {role === 'artisan'
+                      ? 'Nom atelier + Numéro WhatsApp'
+                      : 'Numéro WhatsApp seul'}
+                  </p>
+                </div>
+              </div>
+              <ChevronRight className="w-6 h-6 text-slate-400 group-hover:text-amber-600 shrink-0" />
+            </button>
+
+            {/* Bouton 2 : Je suis nouveau */}
+            <button
+              onClick={() => {
+                sounds.playClick();
+                setCurrentView('register_phone');
+              }}
+              className="w-full p-5 rounded-3xl bg-slate-900 border-2 border-slate-900 hover:border-amber-400 text-left shadow-md active:scale-[0.98] transition-all flex items-center justify-between text-white group cursor-pointer"
+            >
+              <div className="flex items-center gap-4">
+                <div className="w-14 h-14 rounded-2xl bg-amber-500 text-slate-950 flex items-center justify-center shrink-0">
+                  <UserPlus className="w-7 h-7" />
+                </div>
+                <div>
+                  <h3 className="font-black text-xl text-white group-hover:text-amber-300 transition-colors">
+                    Je suis nouveau
+                  </h3>
+                  <p className="text-xs font-semibold text-slate-300 mt-0.5">
+                    {role === 'artisan'
+                      ? 'Inscription atelier en 30 secondes'
+                      : 'Nouveau compte client direct'}
+                  </p>
+                </div>
+              </div>
+              <ChevronRight className="w-6 h-6 text-amber-400 shrink-0" />
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* LOGIN SCREEN (J'AI DÉJÀ UN COMPTE) */}
+      {currentView === 'login' && (
+        <div className="flex-1 flex flex-col justify-center">
+          <div className="text-center mb-6">
+            <h2 className="text-2xl font-black text-slate-900">
+              {role === 'artisan' ? 'Connexion à mon Atelier' : 'Connexion Client'}
+            </h2>
+            <p className="text-sm font-semibold text-slate-600 mt-1">
+              {role === 'artisan'
+                ? 'Entrez le nom de votre atelier et votre numéro WhatsApp'
+                : 'Entrez simplement votre numéro WhatsApp'}
+            </p>
+          </div>
+
+          <div className="bg-white p-5 sm:p-6 rounded-3xl border border-slate-200 shadow-sm mb-6 space-y-4">
+            {/* Si Artisan : Champ [Nom de son atelier / Nom] */}
+            {role === 'artisan' && (
+              <div>
+                <label className="block text-xs font-black uppercase text-slate-700 mb-1 flex items-center gap-1.5">
+                  <Building className="w-4 h-4 text-amber-600" />
+                  <span>Nom de son atelier / Nom de l'artisan</span>
+                </label>
+                <input
+                  type="text"
+                  value={loginAtelierName}
+                  onChange={(e) => setLoginAtelierName(e.target.value)}
+                  placeholder="Ex: Atelier Prestige ou Maître Lawson"
+                  className="w-full px-4 py-3 rounded-xl border-2 border-slate-200 focus:border-amber-500 font-bold text-base text-slate-900 outline-none"
+                  autoFocus
+                />
+              </div>
+            )}
+
+            {/* Champ [Numéro WhatsApp] (Artisan & Client) */}
+            <div>
+              <label className="block text-xs font-black uppercase text-slate-700 mb-1 flex items-center gap-1.5">
+                <Phone className="w-4 h-4 text-emerald-600" />
+                <span>Numéro WhatsApp</span>
+              </label>
+
+              <div className="flex items-center gap-1.5 w-full min-w-0">
+                <select
+                  value={countryCode}
+                  onChange={(e) => setCountryCode(e.target.value)}
+                  className="w-[98px] sm:w-[120px] px-2 py-3 rounded-xl bg-slate-100 border-2 border-slate-200 focus:border-amber-500 font-black text-xs sm:text-sm text-slate-900 outline-none shrink-0 cursor-pointer"
+                >
+                  {COUNTRY_CODES.map((c) => (
+                    <option key={c.code} value={c.code}>
+                      {c.flag} {c.code}
+                    </option>
+                  ))}
+                </select>
+
+                <input
+                  type="tel"
+                  value={phone}
+                  onChange={(e) => setPhone(e.target.value.replace(/\D/g, ''))}
+                  placeholder="Ex: 90 12 34 56"
+                  className="flex-1 min-w-0 px-3 py-3 rounded-xl border-2 border-slate-200 focus:border-amber-500 text-base sm:text-lg font-bold text-slate-900 outline-none"
+                  maxLength={12}
+                  autoFocus={role === 'client'}
+                />
+              </div>
+
+              <p className="text-[11px] font-bold text-slate-500 mt-1">
+                Pays : <span className="text-amber-700">{COUNTRY_CODES.find((c) => c.code === countryCode)?.country || 'Togo'}</span> ({countryCode})
+              </p>
+            </div>
+
+            <button
+              onClick={role === 'artisan' ? handleArtisanLogin : handleClientLogin}
+              disabled={isSearchingAccount || phone.replace(/\D/g, '').length < 6 || (role === 'artisan' && !loginAtelierName.trim())}
+              className="w-full mt-2 min-h-[54px] rounded-2xl bg-amber-500 hover:bg-amber-600 disabled:bg-slate-200 disabled:text-slate-400 text-slate-950 text-base sm:text-lg font-black flex items-center justify-center gap-2 shadow-sm active:scale-[0.98] transition-all cursor-pointer"
+            >
+              <LogIn className="w-5 h-5" />
+              <span>{isSearchingAccount ? 'Vérification...' : role === 'artisan' ? 'Accéder à mon atelier' : 'Accéder à mon compte'}</span>
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* STEP 2 : NOUVEAU COMPTE -> WHATSAPP + CODE OTP AVEC ANTI-DOUBLE */}
+      {currentView === 'register_phone' && (
         <div className="flex-1 flex flex-col justify-center">
           <div className="text-center mb-6">
             <div className="w-16 h-16 rounded-3xl bg-green-100 text-green-700 flex items-center justify-center mx-auto mb-3">
               <Phone className="w-8 h-8" />
             </div>
             <h2 className="text-2xl font-black text-slate-900">
-              Ton numéro WhatsApp
+              {role === 'artisan' ? 'WhatsApp de ton atelier' : 'Ton numéro WhatsApp'}
             </h2>
             <p className="text-base text-slate-600 font-medium mt-1">
               Choisis l'indicatif de ton pays et tape ton numéro sans indicatif
@@ -418,9 +845,7 @@ export const Onboarding: React.FC<OnboardingProps> = ({
               Indicatif pays & Numéro WhatsApp
             </label>
 
-            {/* Country Selector + Phone input: Compact, côte à côte, width flex, zéro débordement sur 360px */}
             <div className="flex items-center gap-1.5 w-full min-w-0">
-              {/* Sélecteur indicatif avant numéro */}
               <select
                 value={countryCode}
                 onChange={(e) => setCountryCode(e.target.value)}
@@ -433,7 +858,6 @@ export const Onboarding: React.FC<OnboardingProps> = ({
                 ))}
               </select>
 
-              {/* Tape numéro sans indicatif */}
               <input
                 type="tel"
                 value={phone}
@@ -452,10 +876,10 @@ export const Onboarding: React.FC<OnboardingProps> = ({
             {!otpSent ? (
               <button
                 onClick={handleSendOtp}
-                disabled={phone.replace(/\D/g, '').length < 6}
+                disabled={isSubmitting || phone.replace(/\D/g, '').length < 6}
                 className="w-full mt-4 min-h-[52px] sm:min-h-[58px] rounded-2xl bg-amber-500 hover:bg-amber-600 disabled:bg-slate-200 disabled:text-slate-400 text-slate-950 text-base sm:text-lg font-black flex items-center justify-center gap-2 shadow-sm active:scale-[0.98] transition-all cursor-pointer"
               >
-                Recevoir mon code par WhatsApp
+                {isSubmitting ? 'Vérification...' : 'Recevoir mon code par WhatsApp'}
               </button>
             ) : (
               <div className="mt-4 pt-4 border-t border-slate-100">
@@ -463,7 +887,6 @@ export const Onboarding: React.FC<OnboardingProps> = ({
                   Entre le code à 4 chiffres reçu sur ton WhatsApp ({countryCode} {phone}) :
                 </p>
 
-                {/* Saisie manuelle du code par le client/artisan (Zéro bouton démo auto-remplissage) */}
                 <input
                   type="text"
                   value={otpCode}
@@ -488,8 +911,8 @@ export const Onboarding: React.FC<OnboardingProps> = ({
         </div>
       )}
 
-      {/* Screen 3 (Artisan only): Choix 2-3 Métiers + Autre */}
-      {step === 3 && role === 'artisan' && (
+      {/* STEP 3 (Artisan only): Choix 1-3 Métiers + Autre */}
+      {currentView === 'trades' && role === 'artisan' && (
         <div className="flex-1 flex flex-col">
           <div className="text-center mb-3">
             <h2 className="text-2xl font-black text-slate-900">
@@ -535,7 +958,6 @@ export const Onboarding: React.FC<OnboardingProps> = ({
             })}
           </div>
 
-          {/* Autre: Custom trade text input */}
           {isOtherSelected && (
             <div className="mb-4 p-4 rounded-2xl bg-amber-50 border-2 border-amber-400 animate-in fade-in zoom-in-95">
               <label className="block text-xs font-black uppercase text-amber-900 mb-1 flex items-center gap-1.5">
@@ -556,7 +978,7 @@ export const Onboarding: React.FC<OnboardingProps> = ({
           <button
             onClick={() => {
               sounds.playClick();
-              setStep(4);
+              setCurrentView('workshop');
             }}
             disabled={
               selectedTrades.length === 0 ||
@@ -570,8 +992,8 @@ export const Onboarding: React.FC<OnboardingProps> = ({
         </div>
       )}
 
-      {/* Screen 4: Nom Atelier + GPS Réel + Import Galerie (0 photo démo) */}
-      {step === 4 && role === 'artisan' && (
+      {/* STEP 4 (Artisan only): Nom Atelier + GPS Réel + Photos (MAX 5 PORTFOLIO) */}
+      {currentView === 'workshop' && role === 'artisan' && (
         <div className="flex-1 flex flex-col overflow-y-auto max-h-[80vh] pr-1 pb-4 space-y-4">
           <div className="text-center mb-2">
             <h2 className="text-2xl font-black text-slate-900">
@@ -624,7 +1046,6 @@ export const Onboarding: React.FC<OnboardingProps> = ({
               </button>
             </div>
 
-            {/* Coordinates Badge */}
             <div
               className={`p-3 rounded-xl border flex items-center justify-between text-xs font-bold ${
                 coords
@@ -653,7 +1074,6 @@ export const Onboarding: React.FC<OnboardingProps> = ({
               </span>
             </div>
 
-            {/* Repère ou Rue text input */}
             <div className="mt-3">
               <label className="block text-xs font-bold text-slate-600 mb-1">
                 Repère ou quartier (facultatif)
@@ -668,7 +1088,7 @@ export const Onboarding: React.FC<OnboardingProps> = ({
             </div>
           </div>
 
-          {/* 3. Photo de profil artisan : Import depuis Galerie (0 photo démo) */}
+          {/* 3. Photo de profil artisan (Galerie) */}
           <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-xs">
             <label className="block text-sm font-bold text-slate-700 mb-2">
               Photo de profil
@@ -715,31 +1135,33 @@ export const Onboarding: React.FC<OnboardingProps> = ({
             </div>
           </div>
 
-          {/* 4. Portfolio : Photos de travaux réalisées (Galerie) */}
+          {/* 4. Portfolio : MAX 5 PHOTOS (Refuse 6ème + "Maximum 5 photos") */}
           <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-xs">
             <div className="flex items-center justify-between mb-2">
               <label className="block text-sm font-bold text-slate-700">
-                Photos de tes réalisations (Portfolio)
+                Photos de tes réalisations (Portfolio max 5)
               </label>
-              <span className="text-xs font-bold text-slate-400">
-                {workPhotos.length} photo{workPhotos.length > 1 ? 's' : ''}
+              <span className="text-xs font-bold text-slate-500">
+                {workPhotos.length} / 5 photo{workPhotos.length > 1 ? 's' : ''}
               </span>
             </div>
 
-            <label className="w-full flex items-center justify-center gap-2 p-4 rounded-xl border-2 border-dashed border-slate-300 hover:border-amber-500 bg-slate-50 hover:bg-amber-50/50 text-slate-700 font-bold text-xs cursor-pointer transition-colors mb-3">
-              <ImageIcon className="w-5 h-5 text-amber-600" />
-              <span>Ajouter des photos de réalisations (Galerie)</span>
-              <input
-                type="file"
-                accept="image/*"
-                multiple
-                onChange={handleWorkPhotosUpload}
-                className="hidden"
-              />
-            </label>
+            {workPhotos.length < 5 && (
+              <label className="w-full flex items-center justify-center gap-2 p-4 rounded-xl border-2 border-dashed border-slate-300 hover:border-amber-500 bg-slate-50 hover:bg-amber-50/50 text-slate-700 font-bold text-xs cursor-pointer transition-colors mb-3">
+                <ImageIcon className="w-5 h-5 text-amber-600" />
+                <span>Ajouter des photos ({5 - workPhotos.length} restante{5 - workPhotos.length > 1 ? 's' : ''})</span>
+                <input
+                  type="file"
+                  accept="image/*"
+                  multiple
+                  onChange={handleWorkPhotosUpload}
+                  className="hidden"
+                />
+              </label>
+            )}
 
             {workPhotos.length > 0 ? (
-              <div className="grid grid-cols-3 gap-2">
+              <div className="grid grid-cols-5 gap-2">
                 {workPhotos.map((photo, idx) => (
                   <div key={idx} className="relative aspect-square rounded-xl overflow-hidden border border-slate-200 group">
                     <img src={photo} alt="" className="w-full h-full object-cover" />
@@ -767,7 +1189,7 @@ export const Onboarding: React.FC<OnboardingProps> = ({
             className="w-full min-h-[58px] rounded-2xl bg-emerald-600 hover:bg-emerald-700 disabled:opacity-60 text-white text-lg font-black flex items-center justify-center gap-2 shadow-lg shadow-emerald-900/10 active:scale-[0.98] transition-all shrink-0 cursor-pointer"
           >
             <Check className="w-6 h-6 stroke-[3]" />
-            {isSubmitting ? 'Enregistrement sur Supabase...' : 'Activer mon compte Artisan EDO'}
+            {isSubmitting ? 'Enregistrement...' : 'Activer mon compte Artisan EDO'}
           </button>
         </div>
       )}

@@ -132,8 +132,26 @@ create policy "Insertion publique reviews"
   on public.reviews for insert
   with check (true);
 
-drop policy if exists "Suppression admin reviews" on public.reviews;
-create policy "Suppression admin reviews"
-  on public.reviews for delete
+-- 5. Table des Clients (clients)
+CREATE TABLE IF NOT EXISTS public.clients (
+  id text primary key,
+  phone text unique not null,
+  name text,
+  created_at timestamptz default now()
+);
+
+alter table public.clients enable row level security;
+
+drop policy if exists "Lecture publique clients" on public.clients;
+create policy "Lecture publique clients"
+  on public.clients for select
   using (true);
+
+drop policy if exists "Insertion publique clients" on public.clients;
+create policy "Insertion publique clients"
+  on public.clients for insert
+  with check (true);
+
+-- 6. Forcer le rechargement immédiat du cache PostgREST (indispensable après ajout de colonnes/tables)
+NOTIFY pgrst, 'reload schema';
 

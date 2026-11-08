@@ -153,7 +153,7 @@ export const ArtisanEditProfileModal: React.FC<ArtisanEditProfileModalProps> = (
           .eq('id', artisan.id);
 
         if (error) {
-          alert("Erreur Supabase lors de la mise à jour : " + error.message);
+          alert("Erreur lors de la mise à jour : " + error.message);
           setIsSaving(false);
           return;
         }
@@ -431,7 +431,7 @@ export const ArtisanEditProfileModal: React.FC<ArtisanEditProfileModalProps> = (
               {isLocked
                 ? `Bloqué (${daysRemaining} jours restants)`
                 : isSaving
-                ? 'Enregistrement sur Supabase...'
+                ? 'Enregistrement...'
                 : 'Enregistrer mes modifications'}
             </span>
           </button>

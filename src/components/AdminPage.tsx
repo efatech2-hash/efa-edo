@@ -168,7 +168,7 @@ export const AdminPage: React.FC<AdminPageProps> = ({
           .eq('id', artisan.id);
 
         if (artError) {
-          alert("Erreur Supabase lors de l'activation : " + artError.message);
+          alert("Erreur lors de l'activation : " + artError.message);
           return;
         }
 
@@ -261,7 +261,7 @@ export const AdminPage: React.FC<AdminPageProps> = ({
           .eq('id', artisan.id);
 
         if (error) {
-          alert("Erreur Supabase lors de la suppression : " + error.message);
+          alert("Erreur lors de la suppression : " + error.message);
         }
       }
       await onRefreshArtisans();
@@ -529,7 +529,7 @@ export const AdminPage: React.FC<AdminPageProps> = ({
               </div>
 
               <div className="text-xs font-bold text-slate-400">
-                Total réels dans Supabase : <b className="text-white">{artisans.length}</b>
+                Total artisans enregistrés : <b className="text-white">{artisans.length}</b>
               </div>
             </div>
 

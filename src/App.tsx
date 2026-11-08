@@ -369,45 +369,70 @@ export default function App() {
       return;
     }
 
-    // Si c'est un artisan, INSERT réel obligatoire sur Supabase
+    // Si c'est un artisan, INSERT réel obligatoire
     if (user.role === 'artisan' && artisanData) {
       if (!supabase) {
-        alert("Erreur Supabase : Le client Supabase n'est pas initialisé. Vérifiez VITE_SUPABASE_URL et VITE_SUPABASE_ANON_KEY.");
+        alert("Erreur : Le service de données n'est pas initialisé. Vérifiez la configuration.");
         return;
       }
 
-      // 1. Vrai INSERT dans Supabase AVANT d'afficher le compte
-      const { data, error } = await supabase
+      // 1. Vrai INSERT AVANT d'afficher le compte
+      const fullPayload = {
+        name: user.name,
+        phone: user.phone,
+        whatsapp: user.phone ? user.phone.replace(/\D/g, '') : '',
+        trade: artisanData.trade,
+        custom_trade_name: artisanData.customTradeName || null,
+        additional_trades: artisanData.additionalTrades || [],
+        address_detail: artisanData.addressDetail || '',
+        lat: artisanData.lat,
+        lng: artisanData.lng,
+        avatar: user.avatar || '',
+        cover_image: '',
+        work_photos: artisanData.workPhotos || [],
+        second_phone: '',
+        locality: '',
+        last_profile_update: new Date().toISOString(),
+      };
+
+      let { data, error } = await supabase
         .from('artisans')
-        .insert([
-          {
-            name: user.name,
-            phone: user.phone,
-            whatsapp: user.phone ? user.phone.replace(/\D/g, '') : '',
-            trade: artisanData.trade,
-            custom_trade_name: artisanData.customTradeName || null,
-            additional_trades: artisanData.additionalTrades || [],
-            address_detail: artisanData.addressDetail || '',
-            lat: artisanData.lat,
-            lng: artisanData.lng,
-            avatar: user.avatar || '',
-            cover_image: '',
-            work_photos: artisanData.workPhotos || [],
-            second_phone: '',
-            locality: '',
-            last_profile_update: new Date().toISOString(),
-          },
-        ])
+        .insert([fullPayload])
         .select()
         .single();
 
+      // Graceful fallback si la colonne 'last_profile_update' ou le schema cache PostgREST bloque
+      if (error && (error.message.includes('last_profile_update') || error.message.includes('schema cache') || error.message.includes('column'))) {
+        const minimalPayload = {
+          name: user.name,
+          phone: user.phone,
+          whatsapp: user.phone ? user.phone.replace(/\D/g, '') : '',
+          trade: artisanData.trade,
+          custom_trade_name: artisanData.customTradeName || null,
+          additional_trades: artisanData.additionalTrades || [],
+          address_detail: artisanData.addressDetail || '',
+          lat: artisanData.lat,
+          lng: artisanData.lng,
+          avatar: user.avatar || '',
+          cover_image: '',
+          work_photos: artisanData.workPhotos || [],
+        };
+        const retryResult = await supabase
+          .from('artisans')
+          .insert([minimalPayload])
+          .select()
+          .single();
+        data = retryResult.data;
+        error = retryResult.error;
+      }
+
       // 2. Si error n'est pas null, alerte et NE PAS afficher le compte
       if (error) {
-        alert('Erreur Supabase : ' + error.message);
+        alert('Erreur : ' + error.message);
         return;
       }
 
-      // 3. Après l'INSERT réussi, recharger la liste avec supabase.from('artisans').select('*')
+      // 3. Après l'INSERT réussi, recharger la liste
       await loadArtisansFromSupabase();
 
       // 4. Activer le compte pour l'utilisateur
