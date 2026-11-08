@@ -43,12 +43,31 @@ export const AdminPage: React.FC<AdminPageProps> = ({
   const [adminPasswordInput, setAdminPasswordInput] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [isAuthenticated, setIsAuthenticated] = useState<boolean>(false);
+  const [isLoggingIn, setIsLoggingIn] = useState<boolean>(false);
   const [boostRequests, setBoostRequests] = useState<BoostRequest[]>([]);
   const [isLoadingRequests, setIsLoadingRequests] = useState(false);
   const [actionLoadingId, setActionLoadingId] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<'artisans' | 'boosts'>('artisans');
   const [searchTerm, setSearchTerm] = useState('');
   const [authError, setAuthError] = useState<string | null>(null);
+
+  // Vérifier si une session Supabase Auth existe déjà au chargement
+  useEffect(() => {
+    if (supabase) {
+      supabase.auth.getSession().then(({ data: { session } }) => {
+        if (session?.user?.email) {
+          const userEmail = session.user.email.toLowerCase().trim();
+          if (userEmail === SUPER_ADMIN_EMAIL) {
+            setIsAuthenticated(true);
+            onUpdateCurrentUser({
+              ...currentUser,
+              email: userEmail,
+            });
+          }
+        }
+      });
+    }
+  }, []);
 
   // Load boost requests from Supabase
   const loadBoostRequests = async () => {
@@ -87,59 +106,84 @@ export const AdminPage: React.FC<AdminPageProps> = ({
     }
   }, [isAuthenticated]);
 
+  // Login Super Admin via Supabase Auth (Zéro mot de passe dans le code ni dans le frontend)
   const handleAdminLogin = async (e?: React.FormEvent) => {
     if (e) e.preventDefault();
     setAuthError(null);
     sounds.playClick();
 
     const emailClean = adminEmailInput.toLowerCase().trim();
-    const passwordClean = adminPasswordInput.trim();
+    const passwordClean = adminPasswordInput;
 
-    // 1. Password must NOT be empty
+    if (!emailClean) {
+      setAuthError("Veuillez saisir l'email administrateur.");
+      return;
+    }
+
     if (!passwordClean) {
       setAuthError("Veuillez saisir le mot de passe administrateur.");
-      sounds.playClick();
       return;
     }
 
-    // 2. Compare against env variable (JAMAIS en dur dans le code)
-    const expectedPassword = import.meta.env.VITE_ADMIN_PASSWORD || 'EfaEdo2026Admin!';
-    if (passwordClean !== expectedPassword) {
-      setAuthError("Mot de passe administrateur incorrect.");
-      sounds.playClick();
+    if (!supabase) {
+      setAuthError("Service d'authentification temporairement indisponible.");
       return;
     }
 
-    // 3. Verify against Supabase public.admins or direct check
-    let authorized = emailClean === SUPER_ADMIN_EMAIL;
+    setIsLoggingIn(true);
 
-    if (!authorized && supabase) {
-      try {
-        const { data } = await supabase
-          .from('admins')
-          .select('email')
-          .eq('email', emailClean)
-          .maybeSingle();
+    try {
+      // 1. Authentification sécurisée côté serveur via Supabase Auth
+      // Le mot de passe est vérifié par Supabase de façon chiffrée (bcrypt)
+      const { data, error } = await supabase.auth.signInWithPassword({
+        email: emailClean,
+        password: passwordClean,
+      });
 
-        if (data?.email) {
-          authorized = true;
-        }
-      } catch {
-        // fallback
+      if (error || !data.user) {
+        setAuthError("Email ou mot de passe administrateur incorrect.");
+        sounds.playClick();
+        return;
       }
-    }
 
-    if (authorized) {
+      // 2. Vérification que l'utilisateur est bien le Super Admin autorisé
+      const authedEmail = (data.user.email || '').toLowerCase().trim();
+      let authorized = authedEmail === SUPER_ADMIN_EMAIL;
+
+      if (!authorized) {
+        try {
+          const { data: adminRow } = await supabase
+            .from('admins')
+            .select('email, role')
+            .eq('email', authedEmail)
+            .maybeSingle();
+
+          if (adminRow?.email) {
+            authorized = true;
+          }
+        } catch {
+          // ignore
+        }
+      }
+
+      if (!authorized) {
+        await supabase.auth.signOut();
+        setAuthError(`Accès refusé. Le compte ${authedEmail} n'est pas habilité comme Super Administrateur.`);
+        sounds.playClick();
+        return;
+      }
+
       setIsAuthenticated(true);
       onUpdateCurrentUser({
         ...currentUser,
-        email: emailClean,
+        email: authedEmail,
       });
       sounds.playSuccess();
       speakAloud("Bienvenue dans le panneau Super Administrateur EFA EDO.");
-    } else {
-      setAuthError(`Accès refusé. Seul le super admin (${SUPER_ADMIN_EMAIL}) est autorisé.`);
-      sounds.playClick();
+    } catch (err) {
+      setAuthError("Erreur d'authentification : " + (err instanceof Error ? err.message : String(err)));
+    } finally {
+      setIsLoggingIn(false);
     }
   };
 
@@ -195,8 +239,15 @@ export const AdminPage: React.FC<AdminPageProps> = ({
     }
   };
 
-  const handleAdminLogout = () => {
+  const handleAdminLogout = async () => {
     sounds.playClick();
+    if (supabase) {
+      try {
+        await supabase.auth.signOut();
+      } catch {
+        // ignore
+      }
+    }
     setIsAuthenticated(false);
     onUpdateCurrentUser({
       ...currentUser,
@@ -390,10 +441,11 @@ export const AdminPage: React.FC<AdminPageProps> = ({
 
             <button
               type="submit"
-              className="w-full min-h-[54px] rounded-2xl bg-amber-500 hover:bg-amber-400 text-slate-950 font-black text-base flex items-center justify-center gap-2 shadow-lg active:scale-95 transition-all cursor-pointer"
+              disabled={isLoggingIn}
+              className="w-full min-h-[54px] rounded-2xl bg-amber-500 hover:bg-amber-400 disabled:opacity-60 text-slate-950 font-black text-base flex items-center justify-center gap-2 shadow-lg active:scale-95 transition-all cursor-pointer"
             >
               <ShieldCheck className="w-5 h-5" />
-              <span>Se connecter au panneau Admin</span>
+              <span>{isLoggingIn ? 'Vérification...' : 'Se connecter au panneau Admin'}</span>
             </button>
           </form>
 
