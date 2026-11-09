@@ -44,6 +44,54 @@ class SoundEffects {
     }
   }
 
+  playHammerToc() {
+    try {
+      const ctx = this.initCtx();
+      if (!ctx) return;
+      const now = ctx.currentTime;
+
+      // 1. Transient physical thud (body of hammer)
+      const thudOsc = ctx.createOscillator();
+      const thudGain = ctx.createGain();
+      thudOsc.type = 'triangle';
+      thudOsc.frequency.setValueAtTime(220, now);
+      thudOsc.frequency.exponentialRampToValueAtTime(45, now + 0.08);
+      thudGain.gain.setValueAtTime(0.45, now);
+      thudGain.gain.exponentialRampToValueAtTime(0.001, now + 0.09);
+      thudOsc.connect(thudGain);
+      thudGain.connect(ctx.destination);
+      thudOsc.start(now);
+      thudOsc.stop(now + 0.09);
+
+      // 2. Sharp "TOC" strike on metal nail
+      const tocOsc = ctx.createOscillator();
+      const tocGain = ctx.createGain();
+      tocOsc.type = 'sine';
+      tocOsc.frequency.setValueAtTime(1250, now);
+      tocOsc.frequency.exponentialRampToValueAtTime(550, now + 0.12);
+      tocGain.gain.setValueAtTime(0.35, now);
+      tocGain.gain.exponentialRampToValueAtTime(0.001, now + 0.14);
+      tocOsc.connect(tocGain);
+      tocGain.connect(ctx.destination);
+      tocOsc.start(now);
+      tocOsc.stop(now + 0.14);
+
+      // 3. Subtle nail ring resonance
+      const ringOsc = ctx.createOscillator();
+      const ringGain = ctx.createGain();
+      ringOsc.type = 'sine';
+      ringOsc.frequency.setValueAtTime(2800, now);
+      ringGain.gain.setValueAtTime(0.12, now);
+      ringGain.gain.exponentialRampToValueAtTime(0.001, now + 0.16);
+      ringOsc.connect(ringGain);
+      ringGain.connect(ctx.destination);
+      ringOsc.start(now);
+      ringOsc.stop(now + 0.16);
+    } catch {
+      // Audio autoplay policy fallback
+    }
+  }
+
   playSuccess() {
     try {
       const ctx = this.initCtx();

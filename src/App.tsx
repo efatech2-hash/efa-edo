@@ -23,6 +23,7 @@ import { VoiceGuideModal } from './components/VoiceGuideModal';
 import { AdminCustomTradesModal } from './components/AdminCustomTradesModal';
 import { ArtisanMap } from './components/ArtisanMap';
 import { AdminPage } from './components/AdminPage';
+import { IntroSplashAnimation } from './components/IntroSplashAnimation';
 import { speakAloud, sounds } from './utils/audio';
 import {
   requestDeviceCoordinates,
@@ -167,6 +168,28 @@ export default function App() {
   const [showProModal, setShowProModal] = useState<boolean>(false);
   const [showVoiceGuide, setShowVoiceGuide] = useState<boolean>(false);
   const [showAdminTradesModal, setShowAdminTradesModal] = useState<boolean>(false);
+
+  // Intro Splash Animation: played on client's first arrival or replay
+  const [showIntroSplash, setShowIntroSplash] = useState<boolean>(() => {
+    try {
+      if (typeof window !== 'undefined') {
+        const seen = sessionStorage.getItem('efa_edo_intro_seen');
+        return !seen;
+      }
+    } catch {
+      // fallback
+    }
+    return false;
+  });
+
+  const handleCompleteIntroSplash = () => {
+    setShowIntroSplash(false);
+    try {
+      sessionStorage.setItem('efa_edo_intro_seen', 'true');
+    } catch {
+      // ignore
+    }
+  };
 
   // Post-call rating simulation
   const [recentCalledArtisan, setRecentCalledArtisan] = useState<Artisan | null>(null);
@@ -600,17 +623,27 @@ export default function App() {
   // Onboarding screen
   if (!hasCompletedOnboarding) {
     return (
-      <Onboarding
-        onComplete={handleOnboardingComplete}
-        onCancel={() => setHasCompletedOnboarding(true)}
-        onSaveCustomTrade={handleSaveCustomTrade}
-        initialCoords={userLocation}
-      />
+      <>
+        {showIntroSplash && (
+          <IntroSplashAnimation onComplete={handleCompleteIntroSplash} />
+        )}
+        <Onboarding
+          onComplete={handleOnboardingComplete}
+          onCancel={() => setHasCompletedOnboarding(true)}
+          onSaveCustomTrade={handleSaveCustomTrade}
+          initialCoords={userLocation}
+        />
+      </>
     );
   }
 
   return (
     <div className="min-h-screen bg-[#F8FAFC] flex flex-col font-sans text-slate-900 antialiased">
+      {/* Intro Splash Animation (First arrival) */}
+      {showIntroSplash && (
+        <IntroSplashAnimation onComplete={handleCompleteIntroSplash} />
+      )}
+
       {/* Top Navigation */}
       <Navbar
         currentUser={currentUser}
@@ -619,6 +652,7 @@ export default function App() {
         hasArtisanProfile={hasArtisanProfile}
         onBecomeArtisan={handleStartArtisanRegistration}
         onOpenAdminPage={handleOpenAdminView}
+        onReplayIntro={() => setShowIntroSplash(true)}
         onSwitchRole={(newRole) => {
           setCurrentRole(newRole);
           if (newRole === 'artisan') {
@@ -878,9 +912,9 @@ export default function App() {
         <div className="max-w-6xl mx-auto px-4 flex flex-col md:flex-row items-center justify-between gap-4">
           <div className="flex items-center gap-3">
             <img
-              src="/assets/aistudio/WhatsApp_Image_2026-10-29_at_23.28.39_4ef8d08c.jpg"
+              src="/logo.png"
               alt="EFA EDO"
-              className="w-[48px] h-[48px] rounded-[12px] object-contain shrink-0 bg-slate-950"
+              className="w-12 h-12 rounded-xl object-contain shrink-0 bg-white p-0.5 shadow-sm"
             />
             <div>
               <p className="font-extrabold text-white text-sm">

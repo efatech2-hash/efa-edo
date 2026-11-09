@@ -23,6 +23,7 @@ interface NavbarProps {
   onOpenAdminTrades?: () => void;
   onOpenAdminPage?: () => void;
   customTradesCount?: number;
+  onReplayIntro?: () => void;
 }
 
 export const Navbar: React.FC<NavbarProps> = ({
@@ -37,6 +38,7 @@ export const Navbar: React.FC<NavbarProps> = ({
   onOpenAdminTrades,
   onOpenAdminPage,
   customTradesCount = 0,
+  onReplayIntro,
 }) => {
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [muted, setMuted] = useState(isAudioMuted());
@@ -52,9 +54,13 @@ export const Navbar: React.FC<NavbarProps> = ({
 
   const readBrandAudio = () => {
     sounds.playClick();
-    speakAloud(
-      "Bienvenue sur EFA EDO, marketplace des artisans africains par EFA TECHNOLOGIE. Trouve un artisan professionnel près de toi en 30 secondes !"
-    );
+    if (onReplayIntro) {
+      onReplayIntro();
+    } else {
+      speakAloud(
+        "Bienvenue sur EFA EDO, marketplace des artisans africains par EFA TECHNOLOGIE. Trouve un artisan professionnel près de toi en 30 secondes !"
+      );
+    }
   };
 
   const handleRoleToggle = () => {
@@ -84,10 +90,10 @@ export const Navbar: React.FC<NavbarProps> = ({
         {/* Brand Zone: Clean, high contrast, gold accent */}
         <div className="flex items-center gap-2.5 min-w-0 shrink">
           <img
-            src="/assets/aistudio/WhatsApp_Image_2026-10-29_at_23.28.39_4ef8d08c.jpg"
+            src="/logo.png"
             alt="EFA EDO"
             onClick={readBrandAudio}
-            className="w-10 h-10 sm:w-11 sm:h-11 rounded-xl object-contain shrink-0 cursor-pointer shadow-xs active:scale-95 transition-transform bg-slate-950"
+            className="w-10 h-10 sm:w-11 sm:h-11 rounded-xl object-contain shrink-0 cursor-pointer shadow-xs active:scale-95 transition-transform bg-white p-0.5"
             title="EFA EDO"
           />
 

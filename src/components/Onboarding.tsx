@@ -622,9 +622,9 @@ export const Onboarding: React.FC<OnboardingProps> = ({
         <div className="flex-1 flex flex-col justify-center">
           <div className="text-center mb-8">
             <img
-              src="/assets/aistudio/WhatsApp_Image_2026-10-29_at_23.28.39_4ef8d08c.jpg"
+              src="/logo.png"
               alt="EFA EDO"
-              className="w-[48px] h-[48px] rounded-[12px] object-contain mx-auto mb-3 shadow-xs bg-slate-950"
+              className="w-20 h-20 sm:w-24 sm:h-24 rounded-2xl object-contain mx-auto mb-3 shadow-md bg-white p-1"
             />
             <h1 className="text-3xl font-extrabold text-slate-900 tracking-tight mb-2">
               Bienvenue sur <span className="text-amber-600">EFA EDO</span>

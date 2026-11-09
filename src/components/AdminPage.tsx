@@ -405,8 +405,12 @@ export const AdminPage: React.FC<AdminPageProps> = ({
     return (
       <div className="min-h-screen bg-slate-950 flex flex-col items-center justify-center p-4">
         <div className="w-full max-w-md bg-slate-900 border-2 border-amber-500/40 rounded-3xl p-6 sm:p-8 shadow-2xl text-white">
-          <div className="w-16 h-16 rounded-2xl bg-amber-500 text-slate-950 flex items-center justify-center mx-auto mb-4 shadow-lg shadow-amber-500/20">
-            <Lock className="w-8 h-8" />
+          <div className="flex justify-center mb-4">
+            <img
+              src="/logo.png"
+              alt="EFA EDO"
+              className="w-16 h-16 rounded-2xl object-contain bg-white p-1 shadow-lg shadow-amber-500/20"
+            />
           </div>
 
           <h1 className="text-2xl font-black text-center text-white">
@@ -502,6 +506,11 @@ export const AdminPage: React.FC<AdminPageProps> = ({
             >
               <ArrowLeft className="w-5 h-5" />
             </button>
+            <img
+              src="/logo.png"
+              alt="EFA EDO"
+              className="w-9 h-9 rounded-xl object-contain bg-white p-0.5 shadow-xs shrink-0"
+            />
             <div>
               <div className="flex items-center gap-2 flex-wrap">
                 <h1 className="text-lg sm:text-xl font-black text-white">
