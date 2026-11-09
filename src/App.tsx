@@ -226,7 +226,23 @@ export default function App() {
       ]);
 
       const artisansData = artisansRes.data;
-      const reviewsData = reviewsRes.data;
+      let reviewsData = Array.isArray(reviewsRes.data) ? reviewsRes.data : [];
+
+      try {
+        const localReviews = JSON.parse(localStorage.getItem('efa_edo_local_reviews') || '[]');
+        if (Array.isArray(localReviews) && localReviews.length > 0) {
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          const existingIds = new Set(reviewsData.map((r: any) => String(r.id)));
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          localReviews.forEach((lr: any) => {
+            if (!existingIds.has(String(lr.id))) {
+              reviewsData.push(lr);
+            }
+          });
+        }
+      } catch {
+        // ignore local parse
+      }
 
       if (!artisansRes.error && Array.isArray(artisansData)) {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -259,38 +275,48 @@ export default function App() {
             computedReviewCount = matchedReviews.length;
           }
 
-          return {
-            id: artisanId,
-            name: item.name || item.full_name || 'Artisan',
-            phone: item.phone || item.tel || '',
-            whatsapp: item.whatsapp || item.phone?.replace(/\D/g, '') || '',
-            trade: item.trade || item.metier || 'Artisan',
-            customTradeName: item.customTradeName || item.custom_trade_name,
-            additionalTrades: item.additionalTrades || item.additional_trades || [],
-            addressDetail: item.addressDetail || item.address_detail || item.address || '',
-            lat: item.lat !== null && item.lat !== undefined ? Number(item.lat) : null,
-            lng: item.lng !== null && item.lng !== undefined ? Number(item.lng) : null,
-            avatar: item.avatar || item.avatar_url || '',
-            coverImage: item.coverImage || item.cover_image || '',
-            workPhotos: item.workPhotos || item.work_photos || [],
-            isOnline: item.isOnline ?? item.is_online ?? true,
-            isPro: Boolean(item.isPro ?? item.is_pro ?? false),
-            isBoosted: Boolean(item.is_boosted ?? item.isBoosted ?? false),
-            boostUntil: item.boost_until || item.boostUntil || null,
-            boostLevel: item.boost_level || item.boostLevel || null,
-            status: item.status || 'approuve',
-            rating: computedRating,
-            reviewCount: computedReviewCount,
-            completedJobs: Number(item.completedJobs ?? item.completed_jobs ?? 0),
-            bioVoiceText: item.bioVoiceText || item.bio_voice_text || item.bio || '',
-            reviews: matchedReviews,
-            dailyViews: Number(item.dailyViews ?? item.daily_views ?? 0),
-            dailyCalls: Number(item.dailyCalls ?? item.daily_calls ?? 0),
-            registeredAt: item.registeredAt || item.registered_at || item.created_at,
-            secondPhone: item.second_phone || item.secondPhone || '',
-            locality: item.locality || '',
-            lastProfileUpdate: item.last_profile_update || item.lastProfileUpdate || null,
-          };
+            let secondPhoneVal = item.second_phone || item.secondPhone || '';
+            let rawBio = item.bioVoiceText || item.bio_voice_text || item.bio || '';
+            if (!secondPhoneVal && typeof rawBio === 'string' && rawBio.includes('TEL2:')) {
+              const telMatch = rawBio.match(/TEL2:([^\s|;,\n]+)/);
+              if (telMatch) {
+                secondPhoneVal = telMatch[1];
+              }
+              rawBio = rawBio.replace(/TEL2:[^\s|;,\n]+/, '').trim();
+            }
+
+            return {
+              id: artisanId,
+              name: item.name || item.full_name || 'Artisan',
+              phone: item.phone || item.tel || '',
+              whatsapp: item.whatsapp || item.phone?.replace(/\D/g, '') || '',
+              trade: item.trade || item.metier || 'Artisan',
+              customTradeName: item.customTradeName || item.custom_trade_name,
+              additionalTrades: item.additionalTrades || item.additional_trades || [],
+              addressDetail: item.addressDetail || item.address_detail || item.address || '',
+              lat: item.lat !== null && item.lat !== undefined ? Number(item.lat) : null,
+              lng: item.lng !== null && item.lng !== undefined ? Number(item.lng) : null,
+              avatar: item.avatar || item.avatar_url || '',
+              coverImage: item.coverImage || item.cover_image || '',
+              workPhotos: item.workPhotos || item.work_photos || [],
+              isOnline: item.isOnline ?? item.is_online ?? true,
+              isPro: Boolean(item.isPro ?? item.is_pro ?? false),
+              isBoosted: Boolean(item.is_boosted ?? item.isBoosted ?? false),
+              boostUntil: item.boost_until || item.boostUntil || null,
+              boostLevel: item.boost_level || item.boostLevel || null,
+              status: item.status || 'approuve',
+              rating: computedRating,
+              reviewCount: computedReviewCount,
+              completedJobs: Number(item.completedJobs ?? item.completed_jobs ?? 0),
+              bioVoiceText: rawBio,
+              reviews: matchedReviews,
+              dailyViews: Number(item.dailyViews ?? item.daily_views ?? 0),
+              dailyCalls: Number(item.dailyCalls ?? item.daily_calls ?? 0),
+              registeredAt: item.registeredAt || item.registered_at || item.created_at,
+              secondPhone: secondPhoneVal,
+              locality: item.locality || '',
+              lastProfileUpdate: item.last_profile_update || item.lastProfileUpdate || null,
+            };
         });
         setArtisans(mapped);
       } else {
@@ -572,27 +598,52 @@ export default function App() {
 
     setRecentCalledArtisan(null);
 
+    // Sauvegarde locale de secours
+    try {
+      const localReviewItem = {
+        id: review.id,
+        artisan_id: artisanId,
+        client_name: review.author || currentUser.name || 'Client vérifié',
+        rating: review.rating,
+        comment: review.text,
+        created_at: new Date().toISOString(),
+      };
+      const savedLocal = JSON.parse(localStorage.getItem('efa_edo_local_reviews') || '[]');
+      savedLocal.unshift(localReviewItem);
+      localStorage.setItem('efa_edo_local_reviews', JSON.stringify(savedLocal.slice(0, 50)));
+    } catch {
+      // ignore local write error
+    }
+
     // 2. Vrai INSERT dans la table public.reviews et mise à jour de la note de l'artisan
     if (supabase) {
       try {
-        const { error: revError } = await supabase.from('reviews').insert([
-          {
-            artisan_id: artisanId,
-            client_name: review.author,
-            rating: review.rating,
-            comment: review.text,
-          },
-        ]);
-
-        if (!revError) {
-          await supabase
-            .from('artisans')
-            .update({
-              rating: newAvgRating,
-              review_count: newCount,
-            })
-            .eq('id', artisanId);
+        let clientId: string | null = null;
+        if (currentUser.id && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(currentUser.id)) {
+          clientId = currentUser.id;
         }
+
+        const insertPayload: Record<string, any> = {
+          artisan_id: artisanId,
+          client_name: review.author || currentUser.name || 'Client vérifié',
+          rating: review.rating,
+          comment: review.text,
+        };
+        if (clientId) {
+          insertPayload.client_id = clientId;
+        }
+
+        await supabase.from('reviews').insert([insertPayload]);
+
+        // Toujours mettre à jour la note moyenne et le nombre d'avis dans la table artisans sur Supabase
+        await supabase
+          .from('artisans')
+          .update({
+            rating: newAvgRating,
+            review_count: newCount,
+          })
+          .eq('id', artisanId);
+
         await loadArtisansFromSupabase();
       } catch {
         // ignore

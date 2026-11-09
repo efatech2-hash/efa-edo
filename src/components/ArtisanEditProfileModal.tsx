@@ -182,19 +182,22 @@ export const ArtisanEditProfileModal: React.FC<ArtisanEditProfileModalProps> = (
           .update(updatePayload)
           .eq('id', artisan.id);
 
-        // Fallback si une colonne optionnelle comme last_profile_update ou second_phone bloque
-        if (error && (error.message.includes('column') || error.message.includes('schema cache'))) {
-          const minimalPayload = {
+        // Fallback si la colonne 'second_phone' n'existe pas encore dans Supabase
+        if (error && (error.message.includes('second_phone') || error.message.includes('column') || error.message.includes('schema cache'))) {
+          const fallbackPayload: Record<string, any> = {
             avatar: avatar,
             cover_image: coverImage,
             work_photos: workPhotos.slice(0, 5),
             address_detail: combinedAddress,
             lat: coords ? coords.lat : null,
             lng: coords ? coords.lng : null,
+            last_profile_update: nowIso,
+            // Stocke la valeur du 2ème téléphone dans bio_voice_text (colonne réelle existante) pour ne JAMAIS la perdre
+            bio_voice_text: secondPhone.trim() ? `TEL2:${secondPhone.trim()}` : (artisan.bioVoiceText || null),
           };
           const retryRes = await supabase
             .from('artisans')
-            .update(minimalPayload)
+            .update(fallbackPayload)
             .eq('id', artisan.id);
           error = retryRes.error;
         }
