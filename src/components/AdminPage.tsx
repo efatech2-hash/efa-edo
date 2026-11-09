@@ -17,6 +17,8 @@ import {
   Phone,
   Eye,
   EyeOff,
+  User,
+  MessageCircle,
 } from 'lucide-react';
 import { Artisan, BoostRequest, CurrentUser } from '../types';
 import { supabase } from '../utils/supabase';
@@ -47,7 +49,9 @@ export const AdminPage: React.FC<AdminPageProps> = ({
   const [boostRequests, setBoostRequests] = useState<BoostRequest[]>([]);
   const [isLoadingRequests, setIsLoadingRequests] = useState(false);
   const [actionLoadingId, setActionLoadingId] = useState<string | null>(null);
-  const [activeTab, setActiveTab] = useState<'artisans' | 'boosts'>('artisans');
+  const [activeTab, setActiveTab] = useState<'artisans' | 'boosts' | 'clients'>('artisans');
+  const [clients, setClients] = useState<Array<{ id: string; name?: string; phone: string; created_at?: string }>>([]);
+  const [isLoadingClients, setIsLoadingClients] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
   const [authError, setAuthError] = useState<string | null>(null);
 
@@ -68,6 +72,28 @@ export const AdminPage: React.FC<AdminPageProps> = ({
       });
     }
   }, []);
+
+  // Load clients from Supabase
+  const loadClients = async () => {
+    if (!supabase) return;
+    setIsLoadingClients(true);
+    try {
+      const { data, error } = await supabase
+        .from('clients')
+        .select('*')
+        .order('created_at', { ascending: false });
+
+      if (!error && Array.isArray(data)) {
+        setClients(data);
+      } else {
+        setClients([]);
+      }
+    } catch {
+      setClients([]);
+    } finally {
+      setIsLoadingClients(false);
+    }
+  };
 
   // Load boost requests from Supabase
   const loadBoostRequests = async () => {
@@ -103,6 +129,7 @@ export const AdminPage: React.FC<AdminPageProps> = ({
   useEffect(() => {
     if (isAuthenticated) {
       loadBoostRequests();
+      loadClients();
     }
   }, [isAuthenticated]);
 
@@ -562,6 +589,28 @@ export const AdminPage: React.FC<AdminPageProps> = ({
               {boostRequests.filter((b) => b.statut === 'en_attente').length} en attente
             </span>
           </button>
+
+          <button
+            onClick={() => {
+              sounds.playClick();
+              setActiveTab('clients');
+            }}
+            className={`flex items-center gap-2 px-5 py-2.5 rounded-2xl font-black text-sm transition-all cursor-pointer ${
+              activeTab === 'clients'
+                ? 'bg-amber-500 text-slate-950 shadow-md shadow-amber-500/20'
+                : 'bg-slate-900 text-slate-400 hover:text-white border border-slate-800'
+            }`}
+          >
+            <User className="w-4 h-4" />
+            <span>Voir tous les clients</span>
+            <span
+              className={`px-2 py-0.5 rounded-full text-xs font-black ${
+                activeTab === 'clients' ? 'bg-slate-950 text-amber-300' : 'bg-slate-800 text-slate-300'
+              }`}
+            >
+              {clients.length}
+            </span>
+          </button>
         </div>
 
         {/* TAB 1: Real Artisans list */}
@@ -859,6 +908,94 @@ export const AdminPage: React.FC<AdminPageProps> = ({
                             <Check className="w-5 h-5 stroke-[3]" />
                             Actif & Visible en tête
                           </span>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* TAB 3: Clients List (public.clients) - Compteur auto "Vous avez X clients" */}
+        {activeTab === 'clients' && (
+          <div className="space-y-4">
+            <div className="bg-slate-900 p-5 rounded-3xl border border-slate-800 flex items-center justify-between gap-4 flex-wrap">
+              <div>
+                <h2 className="text-xl sm:text-2xl font-black text-white">
+                  Vous avez <span className="text-amber-400">{clients.length}</span> client{clients.length > 1 ? 's' : ''}
+                </h2>
+                <p className="text-xs text-slate-400 font-semibold mt-0.5">
+                  Liste des clients enregistrés sur la marketplace EFA EDO
+                </p>
+              </div>
+
+              <button
+                onClick={loadClients}
+                disabled={isLoadingClients}
+                className="px-4 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-bold flex items-center gap-2 border border-slate-700 cursor-pointer"
+              >
+                <RefreshCw className={`w-3.5 h-3.5 ${isLoadingClients ? 'animate-spin' : ''}`} />
+                <span>Actualiser</span>
+              </button>
+            </div>
+
+            {clients.length === 0 ? (
+              <div className="bg-slate-900 p-12 rounded-3xl border border-slate-800 text-center">
+                <User className="w-12 h-12 text-slate-700 mx-auto mb-3" />
+                <p className="text-base font-bold text-slate-400">
+                  Aucun client enregistré pour le moment.
+                </p>
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                {clients.map((client) => {
+                  const cleanWa = (client.phone || '').replace(/\D/g, '');
+                  return (
+                    <div
+                      key={client.id}
+                      className="bg-slate-900 p-4 rounded-2xl border border-slate-800 flex items-center justify-between gap-3 shadow-xs"
+                    >
+                      <div className="min-w-0">
+                        <div className="flex items-center gap-2">
+                          <div className="w-8 h-8 rounded-xl bg-amber-400/20 text-amber-300 flex items-center justify-center font-black text-xs shrink-0">
+                            {(client.name || 'C').charAt(0).toUpperCase()}
+                          </div>
+                          <span className="font-extrabold text-sm text-white truncate">
+                            {client.name || 'Client EDO'}
+                          </span>
+                        </div>
+                        <p className="text-xs font-bold text-slate-400 mt-1 pl-10">
+                          {client.phone}
+                        </p>
+                        {client.created_at && (
+                          <p className="text-[10px] text-slate-500 pl-10">
+                            Inscrit le {new Date(client.created_at).toLocaleDateString('fr-FR')}
+                          </p>
+                        )}
+                      </div>
+
+                      <div className="flex items-center gap-1.5 shrink-0">
+                        {cleanWa && (
+                          <a
+                            href={`https://wa.me/${cleanWa}`}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="p-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white shadow-xs cursor-pointer"
+                            title="Écrire sur WhatsApp"
+                          >
+                            <MessageCircle className="w-4 h-4" />
+                          </a>
+                        )}
+                        {client.phone && (
+                          <a
+                            href={`tel:${client.phone}`}
+                            className="p-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 shadow-xs cursor-pointer"
+                            title="Appeler"
+                          >
+                            <Phone className="w-4 h-4" />
+                          </a>
                         )}
                       </div>
                     </div>

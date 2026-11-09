@@ -122,27 +122,62 @@ class SoundEffects {
 
 export const sounds = new SoundEffects();
 
+let isGlobalAudioMuted = false;
+
+export function setAudioMuted(muted: boolean) {
+  isGlobalAudioMuted = muted;
+  if (muted && typeof window !== 'undefined' && 'speechSynthesis' in window) {
+    window.speechSynthesis.cancel();
+  }
+}
+
+export function isAudioMuted(): boolean {
+  return isGlobalAudioMuted;
+}
+
+export function toggleAudioMute(): boolean {
+  setAudioMuted(!isGlobalAudioMuted);
+  return isGlobalAudioMuted;
+}
+
 /**
- * Text-to-Speech: Speaks out loud in clear French for users who don't read text easily.
+ * Text-to-Speech: Speaks out loud in clear, natural French (Togo friendly, short phrases, human rhythm)
  */
 export function speakAloud(text: string, onEnd?: () => void) {
-  if (typeof window === 'undefined' || !('speechSynthesis' in window)) {
+  if (isGlobalAudioMuted || typeof window === 'undefined' || !('speechSynthesis' in window)) {
     if (onEnd) onEnd();
     return;
   }
 
-  window.speechSynthesis.cancel(); // Stop prior speech
-  const utterance = new SpeechSynthesisUtterance(text);
-  utterance.lang = 'fr-FR';
-  utterance.rate = 0.95; // Slightly slower for clarity
-  utterance.pitch = 1.0;
+  try {
+    window.speechSynthesis.cancel(); // Stop prior speech
+    const utterance = new SpeechSynthesisUtterance(text);
+    utterance.lang = 'fr-FR';
 
-  if (onEnd) {
-    utterance.onend = onEnd;
-    utterance.onerror = onEnd;
+    // Sélection d'une voix naturelle et chaleureuse si disponible
+    const voices = window.speechSynthesis.getVoices();
+    if (voices && voices.length > 0) {
+      const preferredVoice =
+        voices.find((v) => v.lang.startsWith('fr') && (v.name.includes('Natural') || v.name.includes('Google') || v.name.includes('Premium'))) ||
+        voices.find((v) => v.lang.startsWith('fr'));
+      if (preferredVoice) {
+        utterance.voice = preferredVoice;
+      }
+    }
+
+    // Rythme humain naturel : pauses courtes et intonation vivante
+    utterance.rate = 0.98;
+    utterance.pitch = 1.05;
+
+    if (onEnd) {
+      utterance.onend = onEnd;
+      utterance.onerror = onEnd;
+    }
+
+    window.speechSynthesis.speak(utterance);
+  } catch {
+    if (onEnd) onEnd();
   }
-
-  window.speechSynthesis.speak(utterance);
 }
 
 export function stopSpeaking() {

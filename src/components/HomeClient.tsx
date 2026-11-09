@@ -14,6 +14,8 @@ import {
   Sparkles,
   Navigation,
   RotateCcw,
+  ShieldCheck,
+  ExternalLink,
 } from 'lucide-react';
 import { Artisan, GeoCoordinates } from '../types';
 import { CATEGORIES_DATA } from '../data/categories';
@@ -44,6 +46,7 @@ export const HomeClient: React.FC<HomeClientProps> = ({
 }) => {
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedTrade, setSelectedTrade] = useState<string>('Tous');
+  const [selectedLocality, setSelectedLocality] = useState<string>('Toutes');
   const [maxDistanceKm, setMaxDistanceKm] = useState<number | null>(null);
   const [showOnlyOnline, setShowOnlyOnline] = useState(false);
   const [viewMode, setViewMode] = useState<'both' | 'map' | 'list'>('both');
@@ -104,18 +107,56 @@ export const HomeClient: React.FC<HomeClientProps> = ({
     });
   }, [artisans, userLocation]);
 
+  // Extract unique localities from registered artisans
+  const availableLocalities = useMemo(() => {
+    const set = new Set<string>();
+    artisans.forEach((a) => {
+      if (a.locality && a.locality.trim()) {
+        set.add(a.locality.trim());
+      }
+      if (a.addressDetail && a.addressDetail.trim()) {
+        const parts = a.addressDetail.split(/[,()\-–]/).map((p) => p.trim()).filter((p) => p.length > 2);
+        parts.forEach((p) => {
+          if (!p.toLowerCase().includes('rue') && !p.toLowerCase().includes('face') && !p.toLowerCase().includes('près') && p.length < 25) {
+            set.add(p);
+          }
+        });
+      }
+    });
+    return Array.from(set).slice(0, 10);
+  }, [artisans]);
+
   // Filter and sort nearest first
   const filteredArtisans = useMemo(() => {
-    const list = processedArtisans.filter((artisan) => {
+    const list = processedArtisans.filter((artisan: typeof processedArtisans[number]) => {
       if (showOnlyOnline && !artisan.isOnline) return false;
 
       // Filter by trade
       if (selectedTrade !== 'Tous') {
         const matchesMainTrade = artisan.trade.toLowerCase() === selectedTrade.toLowerCase();
         const matchesAdditional = artisan.additionalTrades?.some(
-          (t) => t.toLowerCase() === selectedTrade.toLowerCase()
+          (t: string) => t.toLowerCase() === selectedTrade.toLowerCase()
         );
         if (!matchesMainTrade && !matchesAdditional) return false;
+      }
+
+      // Filter by locality (Bug 12)
+      if (selectedLocality !== 'Toutes') {
+        const targetLoc = selectedLocality
+          .normalize('NFD')
+          .replace(/[\u0300-\u036f]/g, '')
+          .toLowerCase();
+        const aLoc = (artisan.locality || '')
+          .normalize('NFD')
+          .replace(/[\u0300-\u036f]/g, '')
+          .toLowerCase();
+        const aAddr = (artisan.addressDetail || '')
+          .normalize('NFD')
+          .replace(/[\u0300-\u036f]/g, '')
+          .toLowerCase();
+        if (!aLoc.includes(targetLoc) && !aAddr.includes(targetLoc)) {
+          return false;
+        }
       }
 
       // Filter by max distance radius
@@ -123,20 +164,52 @@ export const HomeClient: React.FC<HomeClientProps> = ({
         return false;
       }
 
-      // Filter by text search
+      // Filter by text search (Bug 11: Insensible casse/accents, multi-mots "Efa technologie")
       if (searchTerm.trim()) {
-        const q = searchTerm.toLowerCase();
-        const matchName = artisan.name.toLowerCase().includes(q);
-        const matchTrade = artisan.trade.toLowerCase().includes(q);
-        const matchAddress = artisan.addressDetail.toLowerCase().includes(q);
-        return matchName || matchTrade || matchAddress;
+        const cleanQuery = searchTerm
+          .trim()
+          .normalize('NFD')
+          .replace(/[\u0300-\u036f]/g, '')
+          .toLowerCase();
+
+        const words = cleanQuery.split(/\s+/).filter(Boolean);
+
+        const aName = (artisan.name || '')
+          .normalize('NFD')
+          .replace(/[\u0300-\u036f]/g, '')
+          .toLowerCase();
+        const aTrade = (artisan.trade || '')
+          .normalize('NFD')
+          .replace(/[\u0300-\u036f]/g, '')
+          .toLowerCase();
+        const aCustom = (artisan.customTradeName || '')
+          .normalize('NFD')
+          .replace(/[\u0300-\u036f]/g, '')
+          .toLowerCase();
+        const aAddr = (artisan.addressDetail || '')
+          .normalize('NFD')
+          .replace(/[\u0300-\u036f]/g, '')
+          .toLowerCase();
+        const aLoc = (artisan.locality || '')
+          .normalize('NFD')
+          .replace(/[\u0300-\u036f]/g, '')
+          .toLowerCase();
+
+        const combinedText = `${aName} ${aTrade} ${aCustom} ${aAddr} ${aLoc}`;
+
+        const matchFull = combinedText.includes(cleanQuery);
+        const matchAllWords = words.every((w: string) => combinedText.includes(w));
+
+        if (!matchFull && !matchAllWords) {
+          return false;
+        }
       }
 
       return true;
     });
 
     // Tri : boostés actifs d'abord (is_boosted=true AND boost_until>now()), puis autres par distance
-    return list.sort((a, b) => {
+    return list.sort((a: typeof processedArtisans[number], b: typeof processedArtisans[number]) => {
       const isABoosted =
         !!a.isBoosted && (!a.boostUntil || new Date(a.boostUntil).getTime() > Date.now());
       const isBBoosted =
@@ -147,7 +220,7 @@ export const HomeClient: React.FC<HomeClientProps> = ({
 
       return (a.distanceKm ?? 9999) - (b.distanceKm ?? 9999);
     });
-  }, [processedArtisans, showOnlyOnline, selectedTrade, maxDistanceKm, searchTerm]);
+  }, [processedArtisans, showOnlyOnline, selectedTrade, selectedLocality, maxDistanceKm, searchTerm]);
 
   // Calculate live count online per category
   const getOnlineCount = (tradeName: string) => {
@@ -290,6 +363,134 @@ export const HomeClient: React.FC<HomeClientProps> = ({
               </button>
             );
           })}
+        </div>
+
+        {/* Localités / Quartiers Filter (Bug 12) */}
+        {availableLocalities.length > 0 && (
+          <div className="flex items-center gap-1.5 overflow-x-auto pt-2.5 pb-1 scrollbar-none border-t border-slate-100 mt-2.5">
+            <span className="text-[11px] font-extrabold text-slate-400 uppercase tracking-wider pl-1 shrink-0">
+              Quartier :
+            </span>
+            {['Toutes', ...availableLocalities].map((loc) => {
+              const isSelected = selectedLocality === loc;
+              return (
+                <button
+                  key={loc}
+                  onClick={() => {
+                    sounds.playClick();
+                    setSelectedLocality(loc);
+                  }}
+                  className={`px-3 py-1.5 rounded-xl text-xs font-bold whitespace-nowrap shrink-0 transition-colors cursor-pointer ${
+                    isSelected
+                      ? 'bg-slate-900 text-amber-300 shadow-xs'
+                      : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                  }`}
+                >
+                  {loc}
+                </button>
+              );
+            })}
+          </div>
+        )}
+      </section>
+
+      {/* Voice Tips Banner: Anti-Arnaque, Profil Vérifié, Recrutement, Commande & Donner mon avis */}
+      <section className="bg-gradient-to-br from-amber-500 to-amber-600 p-4 sm:p-5 rounded-3xl text-slate-950 shadow-md space-y-3">
+        <div className="flex items-center justify-between flex-wrap gap-2">
+          <div className="flex items-center gap-2">
+            <ShieldCheck className="w-5 h-5 text-slate-950" />
+            <h3 className="font-black text-sm uppercase tracking-wide">
+              Conseils de Sécurité & Audio EDO
+            </h3>
+          </div>
+          <button
+            onClick={() => {
+              sounds.playClick();
+              window.open('https://efa-technologie.vercel.app', '_blank');
+            }}
+            className="px-3 py-1.5 rounded-xl bg-slate-950 hover:bg-slate-900 text-white font-black text-xs flex items-center gap-1.5 shadow-xs cursor-pointer active:scale-95 transition-transform"
+            title="Ouvrir EFA TECHNOLOGIE"
+          >
+            <span>Donner mon avis</span>
+            <ExternalLink className="w-3.5 h-3.5" />
+          </button>
+        </div>
+
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
+          {/* 1. Conseil Anti-Arnaque (Bugs 16 & 17) */}
+          <div className="bg-white/95 backdrop-blur-xs p-3.5 rounded-2xl border border-amber-400/50 flex flex-col justify-between shadow-xs">
+            <div>
+              <span className="text-[10px] font-black uppercase text-rose-700 bg-rose-100 px-2 py-0.5 rounded-full inline-block mb-1.5">
+                Anti-Arnaque
+              </span>
+              <p className="text-xs font-bold text-slate-900 leading-snug">
+                Ne paie pas avant le travail. Attends que l'artisan soit là. Paie après le travail. Rencontre-toi avec lui avant.
+              </p>
+              <p className="text-[11px] font-semibold text-slate-600 mt-1">
+                Active les notifications. Vérifie que le profil est vérifié et certifié. Si pas vérifié, ne fais pas appel.
+              </p>
+            </div>
+            <button
+              onClick={() => {
+                sounds.playClick();
+                speakAloud(
+                  "Ne paie pas avant le travail. Attends que l'artisan soit là. Paie après le travail. Rencontre-toi avec lui avant. Active les notifications. Vérifie que le profil est vérifié et certifié. Si pas vérifié, ne fais pas appel."
+                );
+              }}
+              className="mt-2.5 pt-2 border-t border-slate-100 text-[11px] font-black text-amber-900 hover:text-slate-950 flex items-center gap-1 cursor-pointer"
+            >
+              <Volume2 className="w-4 h-4 text-amber-600" />
+              <span>Écouter le conseil sécurité</span>
+            </button>
+          </div>
+
+          {/* 2. Message Commande (Bug 19) */}
+          <div className="bg-white/95 backdrop-blur-xs p-3.5 rounded-2xl border border-amber-400/50 flex flex-col justify-between shadow-xs">
+            <div>
+              <span className="text-[10px] font-black uppercase text-emerald-800 bg-emerald-100 px-2 py-0.5 rounded-full inline-block mb-1.5">
+                Besoin d'un Dépannage ?
+              </span>
+              <p className="text-xs font-bold text-slate-900 leading-snug">
+                Tu as un problème voiture, frigo, maison ? Commande ! Il y a beaucoup d'artisans. Inscris-toi, commande, fais connaître l'app.
+              </p>
+            </div>
+            <button
+              onClick={() => {
+                sounds.playClick();
+                speakAloud(
+                  "Tu as un problème voiture, frigo, maison ? Commande ! Il y a beaucoup d'artisans. Inscris-toi, commande, fais connaître l'app."
+                );
+              }}
+              className="mt-2.5 pt-2 border-t border-slate-100 text-[11px] font-black text-amber-900 hover:text-slate-950 flex items-center gap-1 cursor-pointer"
+            >
+              <Volume2 className="w-4 h-4 text-amber-600" />
+              <span>Écouter le message</span>
+            </button>
+          </div>
+
+          {/* 3. Message Recrutement Artisans (Bug 18) */}
+          <div className="bg-white/95 backdrop-blur-xs p-3.5 rounded-2xl border border-amber-400/50 flex flex-col justify-between shadow-xs">
+            <div>
+              <span className="text-[10px] font-black uppercase text-amber-900 bg-amber-100 px-2 py-0.5 rounded-full inline-block mb-1.5">
+                Tu es Artisan ?
+              </span>
+              <p className="text-xs font-bold text-slate-900 leading-snug">
+                Inscris-toi, c'est une bonne application. Il y a beaucoup d'opportunités, beaucoup de clients. Partage l'application pour la faire connaître.
+              </p>
+            </div>
+            <button
+              onClick={() => {
+                sounds.playClick();
+                speakAloud(
+                  "Inscris-toi, c'est une bonne application. Il y a beaucoup d'opportunités, beaucoup de clients. Partage l'application pour la faire connaître."
+                );
+              }}
+              className="mt-2.5 pt-2 border-t border-slate-100 text-[11px] font-black text-amber-900 hover:text-slate-950 flex items-center gap-1 cursor-pointer"
+            >
+              <Volume2 className="w-4 h-4 text-amber-600" />
+              <span>Écouter l'opportunité</span>
+            </button>
+          </div>
         </div>
       </section>
 
@@ -473,7 +674,7 @@ export const HomeClient: React.FC<HomeClientProps> = ({
             </div>
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              {filteredArtisans.map((artisan) => (
+              {filteredArtisans.map((artisan: typeof processedArtisans[number]) => (
                 <div
                   key={artisan.id}
                   onClick={() => onSelectArtisan(artisan)}

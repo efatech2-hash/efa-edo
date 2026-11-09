@@ -2,13 +2,14 @@ import React, { useState } from 'react';
 import {
   Hammer,
   Volume2,
+  VolumeX,
   User,
   RotateCcw,
   Menu,
   X,
 } from 'lucide-react';
 import { CurrentUser, UserRole } from '../types';
-import { speakAloud, sounds } from '../utils/audio';
+import { speakAloud, sounds, isAudioMuted, toggleAudioMute } from '../utils/audio';
 
 interface NavbarProps {
   currentUser: CurrentUser;
@@ -38,6 +39,16 @@ export const Navbar: React.FC<NavbarProps> = ({
   customTradesCount = 0,
 }) => {
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+  const [muted, setMuted] = useState(isAudioMuted());
+
+  const handleToggleMute = () => {
+    sounds.playClick();
+    const newMuted = toggleAudioMute();
+    setMuted(newMuted);
+    if (!newMuted) {
+      speakAloud("Son réactivé.");
+    }
+  };
 
   const readBrandAudio = () => {
     sounds.playClick();
@@ -134,13 +145,25 @@ export const Navbar: React.FC<NavbarProps> = ({
             </div>
           )}
 
+          {/* Mute / Unmute Button */}
+          <button
+            onClick={handleToggleMute}
+            className={`p-2 rounded-xl text-xs font-bold transition-colors cursor-pointer ${
+              muted ? 'bg-rose-500/20 text-rose-300 border border-rose-500/40' : 'bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700'
+            }`}
+            title={muted ? 'Activer le son' : 'Couper le son (Mute)'}
+            aria-label="Contrôle son"
+          >
+            {muted ? <VolumeX className="w-4 h-4 text-rose-400" /> : <Volume2 className="w-4 h-4 text-amber-400" />}
+          </button>
+
           {/* Quick Voice Assistant button */}
           <button
             onClick={() => {
               sounds.playClick();
               onOpenVoiceGuide();
             }}
-            className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-amber-400 hover:bg-amber-500 text-slate-950 text-xs font-black shadow-xs active:scale-95 transition-transform"
+            className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-amber-400 hover:bg-amber-500 text-slate-950 text-xs font-black shadow-xs active:scale-95 transition-transform cursor-pointer"
             title="Assistance Vocale"
           >
             <Volume2 className="w-3.5 h-3.5" />
@@ -182,7 +205,7 @@ export const Navbar: React.FC<NavbarProps> = ({
               sounds.playClick();
               onRestartOnboarding();
             }}
-            className="p-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white border border-slate-700 transition-colors"
+            className="p-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white border border-slate-700 transition-colors cursor-pointer"
             title="Relancer l'onboarding (30s)"
             aria-label="Recommencer"
           >
@@ -192,13 +215,25 @@ export const Navbar: React.FC<NavbarProps> = ({
 
         {/* Mobile Action Zone: (< 768px, specifically 360px+) */}
         <div className="flex md:hidden items-center gap-1.5 shrink-0">
+          {/* Mute button */}
+          <button
+            onClick={handleToggleMute}
+            className={`w-10 h-10 rounded-xl flex items-center justify-center transition-colors cursor-pointer ${
+              muted ? 'bg-rose-500/20 text-rose-300 border border-rose-500/40' : 'bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700'
+            }`}
+            title={muted ? 'Activer le son' : 'Couper le son (Mute)'}
+            aria-label="Contrôle son"
+          >
+            {muted ? <VolumeX className="w-4 h-4 text-rose-400" /> : <Volume2 className="w-4 h-4 text-amber-400" />}
+          </button>
+
           {/* Quick Voice button */}
           <button
             onClick={() => {
               sounds.playClick();
               onOpenVoiceGuide();
             }}
-            className="w-10 h-10 rounded-xl bg-amber-400 hover:bg-amber-500 text-slate-950 flex items-center justify-center shadow-xs active:scale-95 transition-transform"
+            className="w-10 h-10 rounded-xl bg-amber-400 hover:bg-amber-500 text-slate-950 flex items-center justify-center shadow-xs active:scale-95 transition-transform cursor-pointer"
             title="Assistance Vocale"
             aria-label="Aide Vocale"
           >
@@ -209,7 +244,7 @@ export const Navbar: React.FC<NavbarProps> = ({
           <button
             onClick={() => {
               sounds.playClick();
-              setIsMobileMenuOpen((prev) => !prev);
+              setIsMobileMenuOpen((prev: boolean) => !prev);
             }}
             className="w-10 h-10 rounded-xl bg-slate-800 hover:bg-slate-700 border border-slate-700 text-white flex items-center justify-center active:scale-95 transition-transform"
             aria-label={isMobileMenuOpen ? 'Fermer le menu' : 'Ouvrir le menu'}

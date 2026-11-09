@@ -369,14 +369,24 @@ export default function App() {
       return;
     }
 
-    // Si c'est un artisan, INSERT réel obligatoire
+    // Si c'est un artisan qui se reconnecte ("J'ai déjà un compte")
+    if (user.role === 'artisan' && !artisanData) {
+      setCurrentUser(user);
+      setCurrentRole('artisan');
+      setHasCompletedOnboarding(true);
+      setActiveTab('artisan');
+      await loadArtisansFromSupabase();
+      return;
+    }
+
+    // Si c'est un nouvel artisan, INSERT réel obligatoire
     if (user.role === 'artisan' && artisanData) {
       if (!supabase) {
         alert("Erreur : Le service de données n'est pas initialisé. Vérifiez la configuration.");
         return;
       }
 
-      // 1. Vrai INSERT AVANT d'afficher le compte
+      // 1. Vrai INSERT AVANT d'afficher le compte (ne pas envoyer locality qui n'existe pas en colonne)
       const fullPayload = {
         name: user.name,
         phone: user.phone,
@@ -391,7 +401,6 @@ export default function App() {
         cover_image: '',
         work_photos: artisanData.workPhotos || [],
         second_phone: '',
-        locality: '',
         last_profile_update: new Date().toISOString(),
       };
 
@@ -426,10 +435,39 @@ export default function App() {
         error = retryResult.error;
       }
 
-      // 2. Si error n'est pas null, alerte et NE PAS afficher le compte
+      // 2. Gestion propre des erreurs et doublons
       if (error) {
-        alert('Erreur : ' + error.message);
-        return;
+        const isDuplicate =
+          error.code === '23505' ||
+          error.message.toLowerCase().includes('duplicate') ||
+          error.message.toLowerCase().includes('already exists') ||
+          error.message.toLowerCase().includes('unique');
+
+        if (isDuplicate) {
+          alert("Ce numéro ou cet atelier est déjà inscrit. Connectez-vous avec l'option 'J'ai déjà un compte'.");
+          return;
+        }
+
+        // Vérifier si le compte a quand même été créé pour ne pas afficher de fausse erreur
+        try {
+          const { data: existing } = await supabase
+            .from('artisans')
+            .select('*')
+            .eq('phone', user.phone)
+            .maybeSingle();
+
+          if (existing?.id) {
+            data = existing;
+            error = null;
+          }
+        } catch {
+          // ignore
+        }
+
+        if (error) {
+          alert('Erreur : ' + error.message);
+          return;
+        }
       }
 
       // 3. Après l'INSERT réussi, recharger la liste
@@ -532,6 +570,7 @@ export default function App() {
             })
             .eq('id', artisanId);
         }
+        await loadArtisansFromSupabase();
       } catch {
         // ignore
       }
@@ -726,6 +765,14 @@ export default function App() {
                   onViewPublicProfile={(artisan) => setSelectedArtisanProfile(artisan)}
                   onUpdateArtisan={(updated) => {
                     setArtisans((prev) => prev.map((a) => (a.id === updated.id ? updated : a)));
+                    setCurrentUser((prev) => ({
+                      ...prev,
+                      avatar: updated.avatar,
+                      name: updated.name,
+                    }));
+                    if ((selectedArtisanProfile as Artisan | null)?.id === updated.id) {
+                      setSelectedArtisanProfile(updated);
+                    }
                   }}
                 />
               ) : (

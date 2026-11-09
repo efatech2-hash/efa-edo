@@ -38,9 +38,16 @@ export const ArtisanEditProfileModal: React.FC<ArtisanEditProfileModalProps> = (
   const daysRemaining = isLocked
     ? Math.ceil((SEVEN_DAYS_MS - timeSinceUpdate) / (24 * 60 * 60 * 1000))
     : 0;
+  const nextAllowedDate = new Date(lastUpdate + SEVEN_DAYS_MS);
+  const formattedNextDate = nextAllowedDate.toLocaleDateString('fr-FR', {
+    day: 'numeric',
+    month: 'long',
+    year: 'numeric',
+  });
 
   // Form states
   const [avatar, setAvatar] = useState(artisan.avatar || '');
+  const [coverImage, setCoverImage] = useState(artisan.coverImage || '');
   const [workPhotos, setWorkPhotos] = useState<string[]>(artisan.workPhotos || []);
   const [addressDetail, setAddressDetail] = useState(artisan.addressDetail || '');
   const [locality, setLocality] = useState(artisan.locality || '');
@@ -63,6 +70,22 @@ export const ArtisanEditProfileModal: React.FC<ArtisanEditProfileModalProps> = (
     reader.onload = () => {
       if (typeof reader.result === 'string') {
         setAvatar(reader.result);
+        sounds.playSuccess();
+      }
+    };
+    reader.readAsDataURL(file);
+  };
+
+  // Upload cover photo from gallery (comme Facebook/WhatsApp)
+  const handleCoverUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (isLocked) return;
+    const file = e.target.files?.[0];
+    if (!file) return;
+    sounds.playClick();
+    const reader = new FileReader();
+    reader.onload = () => {
+      if (typeof reader.result === 'string') {
+        setCoverImage(reader.result);
         sounds.playSuccess();
       }
     };
@@ -127,7 +150,7 @@ export const ArtisanEditProfileModal: React.FC<ArtisanEditProfileModalProps> = (
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
     if (isLocked) {
-      alert(`Modification bloquée. Vous pourrez modifier votre profil dans ${daysRemaining} jour${daysRemaining > 1 ? 's' : ''}.`);
+      alert(`Modification bloquée. Vous pourrez modifier votre profil à partir du ${formattedNextDate} (dans ${daysRemaining} jour${daysRemaining > 1 ? 's' : ''}).`);
       return;
     }
 
@@ -138,19 +161,43 @@ export const ArtisanEditProfileModal: React.FC<ArtisanEditProfileModalProps> = (
       const nowIso = new Date().toISOString();
 
       if (supabase) {
-        const { error } = await supabase
+        // Enregistrer quartier/repère dans address_detail (ne pas envoyer la colonne 'locality' qui n'existe pas en base)
+        const combinedAddress = locality.trim()
+          ? `${addressDetail.trim()} (${locality.trim()})`.trim()
+          : addressDetail.trim();
+
+        const updatePayload: Record<string, any> = {
+          avatar: avatar,
+          cover_image: coverImage,
+          work_photos: workPhotos.slice(0, 5),
+          address_detail: combinedAddress,
+          second_phone: secondPhone.trim(),
+          lat: coords ? coords.lat : null,
+          lng: coords ? coords.lng : null,
+          last_profile_update: nowIso,
+        };
+
+        let { error } = await supabase
           .from('artisans')
-          .update({
+          .update(updatePayload)
+          .eq('id', artisan.id);
+
+        // Fallback si une colonne optionnelle comme last_profile_update ou second_phone bloque
+        if (error && (error.message.includes('column') || error.message.includes('schema cache'))) {
+          const minimalPayload = {
             avatar: avatar,
+            cover_image: coverImage,
             work_photos: workPhotos.slice(0, 5),
-            address_detail: addressDetail.trim(),
-            locality: locality.trim(),
-            second_phone: secondPhone.trim(),
+            address_detail: combinedAddress,
             lat: coords ? coords.lat : null,
             lng: coords ? coords.lng : null,
-            last_profile_update: nowIso,
-          })
-          .eq('id', artisan.id);
+          };
+          const retryRes = await supabase
+            .from('artisans')
+            .update(minimalPayload)
+            .eq('id', artisan.id);
+          error = retryRes.error;
+        }
 
         if (error) {
           alert("Erreur lors de la mise à jour : " + error.message);
@@ -162,6 +209,7 @@ export const ArtisanEditProfileModal: React.FC<ArtisanEditProfileModalProps> = (
       const updatedArtisan: Artisan = {
         ...artisan,
         avatar,
+        coverImage,
         workPhotos: workPhotos.slice(0, 5),
         addressDetail: addressDetail.trim(),
         locality: locality.trim(),
@@ -173,7 +221,7 @@ export const ArtisanEditProfileModal: React.FC<ArtisanEditProfileModalProps> = (
 
       onSaveSuccess(updatedArtisan);
       sounds.playSuccess();
-      speakAloud("Profil artisan mis à jour avec succès ! Prochaine modification autorisée dans 7 jours.");
+      speakAloud(`Profil mis à jour avec succès ! Prochaine modification autorisée à partir du ${formattedNextDate}.`);
       onClose();
     } catch (err) {
       alert("Erreur imprévue : " + (err instanceof Error ? err.message : String(err)));
@@ -294,6 +342,55 @@ export const ArtisanEditProfileModal: React.FC<ArtisanEditProfileModalProps> = (
                 </label>
               </div>
             </div>
+          </div>
+
+          {/* Photo de couverture modifiable (comme Facebook/WhatsApp) */}
+          <div className="bg-slate-50 p-4 rounded-2xl border border-slate-200">
+            <div className="flex items-center justify-between mb-2">
+              <label className="block text-xs font-black uppercase text-slate-700">
+                Photo de couverture (Bannière atelier)
+              </label>
+              {coverImage && !isLocked && (
+                <button
+                  type="button"
+                  onClick={() => setCoverImage('')}
+                  className="text-xs font-bold text-rose-600 hover:underline cursor-pointer"
+                >
+                  Supprimer
+                </button>
+              )}
+            </div>
+
+            <div className="relative h-28 w-full rounded-xl overflow-hidden border border-slate-200 bg-gradient-to-r from-amber-600 via-amber-700 to-amber-900 flex items-center justify-center mb-3">
+              {coverImage ? (
+                <img
+                  src={coverImage}
+                  alt="Couverture"
+                  className="w-full h-full object-cover"
+                />
+              ) : (
+                <div className="text-center p-2 text-white/90">
+                  <ImageIcon className="w-6 h-6 text-amber-200 mx-auto mb-1" />
+                  <span className="text-[11px] font-bold">
+                    Bannière élégante EDO par défaut
+                  </span>
+                </div>
+              )}
+            </div>
+
+            {!isLocked && (
+              <label className="inline-flex items-center gap-2 px-3 py-2 rounded-xl bg-slate-900 hover:bg-slate-800 text-white font-bold text-xs shadow-xs cursor-pointer active:scale-95 transition-transform">
+                <Upload className="w-4 h-4" />
+                <span>Changer la photo de couverture</span>
+                <input
+                  type="file"
+                  accept="image/*"
+                  onChange={handleCoverUpload}
+                  disabled={isLocked}
+                  className="hidden"
+                />
+              </label>
+            )}
           </div>
 
           {/* 2. Portfolio : Réalisations (max 5 images) */}

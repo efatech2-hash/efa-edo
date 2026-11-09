@@ -138,16 +138,17 @@ export const Onboarding: React.FC<OnboardingProps> = ({
     setCurrentView('auth_choice');
   };
 
-  // 3. ARTISAN : "J'ai déjà un compte" -> Login check in Supabase
+  // 3. ARTISAN : "J'ai déjà un compte" -> Connexion instantanée dans Supabase
   const handleArtisanLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     const cleanPhone = phone.replace(/\D/g, '');
-    const cleanName = loginAtelierName.trim().toLowerCase();
+    const phoneSuffix = cleanPhone.length >= 8 ? cleanPhone.slice(-8) : cleanPhone;
+    const cleanName = loginAtelierName
+      .trim()
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .toLowerCase();
 
-    if (!cleanName) {
-      alert("Veuillez saisir le nom de votre atelier ou votre nom.");
-      return;
-    }
     if (!cleanPhone || cleanPhone.length < 6) {
       alert("Veuillez saisir votre numéro WhatsApp.");
       return;
@@ -163,6 +164,7 @@ export const Onboarding: React.FC<OnboardingProps> = ({
         return;
       }
 
+      // Requête directe
       const { data, error } = await supabase.from('artisans').select('*');
       if (error) {
         alert("Erreur : " + error.message);
@@ -170,16 +172,26 @@ export const Onboarding: React.FC<OnboardingProps> = ({
         return;
       }
 
-      // Match artisan by phone + name
+      // Match ultra-robuste : numéro WhatsApp (derniers 8 chiffres) ET nom/atelier
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const match = (data || []).find((a: any) => {
         const artisanPhone = (a.phone || '').replace(/\D/g, '');
         const artisanWa = (a.whatsapp || '').replace(/\D/g, '');
-        const phoneMatch = artisanPhone.includes(cleanPhone) || artisanWa.includes(cleanPhone);
+        const phoneMatch =
+          (phoneSuffix && (artisanPhone.endsWith(phoneSuffix) || artisanWa.endsWith(phoneSuffix))) ||
+          (cleanPhone && (artisanPhone.includes(cleanPhone) || artisanWa.includes(cleanPhone)));
 
-        const aName = (a.name || '').toLowerCase();
-        const aAddress = (a.address_detail || '').toLowerCase();
+        const aName = (a.name || '')
+          .normalize('NFD')
+          .replace(/[\u0300-\u036f]/g, '')
+          .toLowerCase();
+        const aAddress = (a.address_detail || '')
+          .normalize('NFD')
+          .replace(/[\u0300-\u036f]/g, '')
+          .toLowerCase();
+
         const nameMatch =
+          !cleanName ||
           aName.includes(cleanName) ||
           cleanName.includes(aName) ||
           aAddress.includes(cleanName);
@@ -189,7 +201,7 @@ export const Onboarding: React.FC<OnboardingProps> = ({
 
       if (match) {
         sounds.playSuccess();
-        speakAloud(`Bon retour ${match.name}. Votre profil artisan est ouvert !`);
+        speakAloud(`Bon retour ${match.name}. Ton atelier est ouvert !`);
         const artisanUser: CurrentUser = {
           id: String(match.id),
           artisanId: String(match.id),
@@ -214,10 +226,11 @@ export const Onboarding: React.FC<OnboardingProps> = ({
     }
   };
 
-  // 4. CLIENT : "J'ai déjà un compte" -> Login check in Supabase
+  // 4. CLIENT : "J'ai déjà un compte" -> Connexion instantanée
   const handleClientLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     const cleanPhone = phone.replace(/\D/g, '');
+    const phoneSuffix = cleanPhone.length >= 8 ? cleanPhone.slice(-8) : cleanPhone;
 
     if (!cleanPhone || cleanPhone.length < 6) {
       alert("Veuillez saisir votre numéro WhatsApp.");
@@ -236,14 +249,15 @@ export const Onboarding: React.FC<OnboardingProps> = ({
 
       let foundClient: { id: string; name: string; phone: string } | null = null;
 
-      // Check in clients table
+      // 1. Vérifier dans la table clients
       try {
         const { data: clientsData } = await supabase.from('clients').select('*');
         if (Array.isArray(clientsData)) {
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          const match = clientsData.find((c: any) =>
-            (c.phone || '').replace(/\D/g, '').includes(cleanPhone)
-          );
+          const match = clientsData.find((c: any) => {
+            const p = (c.phone || '').replace(/\D/g, '');
+            return (phoneSuffix && p.endsWith(phoneSuffix)) || (cleanPhone && p.includes(cleanPhone));
+          });
           if (match) {
             foundClient = {
               id: String(match.id),
@@ -253,26 +267,33 @@ export const Onboarding: React.FC<OnboardingProps> = ({
           }
         }
       } catch {
-        // continue search
+        // continue
       }
 
-      // If not in clients table, check if registered as artisan
+      // 2. Si pas trouvé dans clients, vérifier si inscrit comme artisan
       if (!foundClient) {
-        const { data: artisansData } = await supabase.from('artisans').select('*');
-        if (Array.isArray(artisansData)) {
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          const match = artisansData.find((a: any) => {
-            const p = (a.phone || '').replace(/\D/g, '');
-            const w = (a.whatsapp || '').replace(/\D/g, '');
-            return p.includes(cleanPhone) || w.includes(cleanPhone);
-          });
-          if (match) {
-            foundClient = {
-              id: String(match.id),
-              name: match.name || 'Client EDO',
-              phone: match.phone || `${countryCode} ${cleanPhone}`,
-            };
+        try {
+          const { data: artisansData } = await supabase.from('artisans').select('*');
+          if (Array.isArray(artisansData)) {
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            const match = artisansData.find((a: any) => {
+              const p = (a.phone || '').replace(/\D/g, '');
+              const w = (a.whatsapp || '').replace(/\D/g, '');
+              return (
+                (phoneSuffix && (p.endsWith(phoneSuffix) || w.endsWith(phoneSuffix))) ||
+                (cleanPhone && (p.includes(cleanPhone) || w.includes(cleanPhone)))
+              );
+            });
+            if (match) {
+              foundClient = {
+                id: String(match.id),
+                name: match.name || 'Client EDO',
+                phone: match.phone || `${countryCode} ${cleanPhone}`,
+              };
+            }
           }
+        } catch {
+          // continue
         }
       }
 
@@ -287,7 +308,7 @@ export const Onboarding: React.FC<OnboardingProps> = ({
         };
         onComplete(clientUser);
       } else {
-        alert("Erreur : Aucun compte client trouvé avec ce numéro WhatsApp. Cliquez sur 'Je suis nouveau' pour vous inscrire en 30 secondes.");
+        alert("Erreur : Aucun compte client trouvé avec ce numéro WhatsApp. Cliquez sur 'Je suis nouveau' pour vous inscrire en 10 secondes.");
       }
     } catch (err) {
       alert("Erreur : " + (err instanceof Error ? err.message : String(err)));

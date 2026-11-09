@@ -10,6 +10,9 @@ import {
   ExternalLink,
   Edit,
   Lock,
+  Sparkles,
+  X,
+  ChevronRight,
 } from 'lucide-react';
 import { Artisan, CurrentUser } from '../types';
 import { speakAloud, sounds } from '../utils/audio';
@@ -33,6 +36,33 @@ export const HomeArtisan: React.FC<HomeArtisanProps> = ({
   onUpdateArtisan,
 }) => {
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
+  const [showMissingFieldsModal, setShowMissingFieldsModal] = useState(false);
+
+  // Calcul dynamique de complétude du profil et liste exacte des champs manquants
+  const missingFields: string[] = [];
+  let completionPoints = 0;
+
+  if (currentArtisan.avatar) completionPoints += 20;
+  else missingFields.push("Photo de profil de l'artisan");
+
+  if (currentArtisan.name && currentArtisan.trade) completionPoints += 20;
+
+  if (currentArtisan.addressDetail && currentArtisan.addressDetail.trim().length > 3) completionPoints += 15;
+  else missingFields.push("Adresse détaillée ou repère de l'atelier");
+
+  if (currentArtisan.lat !== null && currentArtisan.lng !== null) completionPoints += 15;
+  else missingFields.push("Position GPS de l'atelier");
+
+  if (currentArtisan.workPhotos && currentArtisan.workPhotos.length > 0) completionPoints += 15;
+  else missingFields.push("Photos de réalisations (Portfolio travaux)");
+
+  if (currentArtisan.coverImage) completionPoints += 10;
+  else missingFields.push("Photo de couverture (Bannière atelier)");
+
+  if (currentArtisan.secondPhone) completionPoints += 5;
+  else missingFields.push("Deuxième numéro de téléphone ou WhatsApp");
+
+  const completionPercentage = Math.min(100, completionPoints);
 
   // Check 7-day rule
   const lastUpdate = currentArtisan.lastProfileUpdate
@@ -102,6 +132,46 @@ export const HomeArtisan: React.FC<HomeArtisanProps> = ({
         >
           <Volume2 className="w-6 h-6" />
         </button>
+      </div>
+
+      {/* Profil Completion Bar & Modal Trigger (Bug 9) */}
+      <div
+        onClick={() => {
+          sounds.playClick();
+          setShowMissingFieldsModal(true);
+        }}
+        className="bg-white p-4 rounded-3xl border border-slate-200 shadow-xs cursor-pointer hover:border-amber-400 active:scale-[0.99] transition-all"
+      >
+        <div className="flex items-center justify-between mb-2">
+          <div className="flex items-center gap-2">
+            <Sparkles className="w-4 h-4 text-amber-500" />
+            <span className="text-xs font-black uppercase tracking-wider text-slate-700">
+              Complétude de ton profil
+            </span>
+          </div>
+          <span className="text-xs font-black px-2.5 py-0.5 rounded-full bg-amber-100 text-amber-900 border border-amber-300">
+            {completionPercentage}%
+          </span>
+        </div>
+
+        <div className="w-full h-3 rounded-full bg-slate-100 overflow-hidden mb-1.5">
+          <div
+            className="h-full rounded-full bg-gradient-to-r from-amber-500 to-emerald-500 transition-all duration-500"
+            style={{ width: `${completionPercentage}%` }}
+          />
+        </div>
+
+        <div className="flex items-center justify-between text-[11px] font-bold text-slate-500 pt-0.5">
+          <span>
+            {missingFields.length === 0
+              ? 'Ton profil est 100% complet et optimal !'
+              : `Il te manque ${missingFields.length} élément${missingFields.length > 1 ? 's' : ''}`}
+          </span>
+          <span className="text-amber-700 font-extrabold flex items-center gap-0.5">
+            <span>Détails</span>
+            <ChevronRight className="w-3.5 h-3.5" />
+          </span>
+        </div>
       </div>
 
       {/* GIANT TOGGLE SWITCH (CENTER OF SCREEN) */}
@@ -269,6 +339,70 @@ export const HomeArtisan: React.FC<HomeArtisanProps> = ({
             }
           }}
         />
+      )}
+
+      {/* Modal Détails Complétude Profil (Bug 9) */}
+      {showMissingFieldsModal && (
+        <div className="fixed inset-0 z-50 bg-black/75 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-white w-full max-w-md rounded-3xl p-6 shadow-2xl border-2 border-amber-400 animate-in fade-in zoom-in-95">
+            <div className="flex items-center justify-between mb-4">
+              <div className="flex items-center gap-2">
+                <div className="w-10 h-10 rounded-xl bg-amber-100 text-amber-800 flex items-center justify-center font-black">
+                  {completionPercentage}%
+                </div>
+                <div>
+                  <h3 className="font-black text-lg text-slate-900">
+                    Complétude de ton profil
+                  </h3>
+                  <p className="text-xs text-slate-500 font-bold">
+                    {missingFields.length === 0 ? 'Profil parfait !' : 'Éléments à ajouter :'}
+                  </p>
+                </div>
+              </div>
+
+              <button
+                onClick={() => setShowMissingFieldsModal(false)}
+                className="w-9 h-9 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-700 flex items-center justify-center cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {missingFields.length === 0 ? (
+              <div className="p-4 rounded-2xl bg-emerald-50 border border-emerald-200 text-emerald-900 text-sm font-bold text-center mb-4">
+                Bravo ! Ton profil atelier est 100% complet. Les clients ont toutes les informations pour te contacter en confiance.
+              </div>
+            ) : (
+              <div className="space-y-2 mb-6">
+                <p className="text-xs font-black uppercase text-amber-900 bg-amber-50 px-3 py-1 rounded-lg">
+                  Il te manque encore :
+                </p>
+                <ul className="space-y-2">
+                  {missingFields.map((field, idx) => (
+                    <li
+                      key={idx}
+                      className="p-3 rounded-xl bg-slate-50 border border-slate-200 flex items-center gap-2.5 text-xs font-extrabold text-slate-800"
+                    >
+                      <span className="w-2 h-2 rounded-full bg-amber-500 shrink-0" />
+                      <span>{field}</span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
+
+            <button
+              onClick={() => {
+                setShowMissingFieldsModal(false);
+                setIsEditModalOpen(true);
+              }}
+              className="w-full min-h-[50px] rounded-2xl bg-amber-500 hover:bg-amber-400 text-slate-950 font-black text-sm flex items-center justify-center gap-2 shadow-md cursor-pointer"
+            >
+              <Edit className="w-4 h-4" />
+              <span>Compléter mon profil maintenant</span>
+            </button>
+          </div>
+        </div>
       )}
     </div>
   );

@@ -141,8 +141,8 @@ export const ArtisanProfile: React.FC<ArtisanProfileProps> = ({
         </div>
       </div>
 
-      {/* Workshop Cover Image : Si pas de couverture -> fond neutre uni (0 photo démo) */}
-      <div className="relative h-44 sm:h-60 w-full overflow-hidden bg-slate-900">
+      {/* Workshop Cover Image : Si pas de couverture -> fond élégant chaleureux EDO (pas de noir) */}
+      <div className="relative h-44 sm:h-60 w-full overflow-hidden bg-gradient-to-r from-amber-700 via-amber-800 to-slate-900">
         {artisan.coverImage ? (
           <img
             src={artisan.coverImage}
@@ -150,7 +150,11 @@ export const ArtisanProfile: React.FC<ArtisanProfileProps> = ({
             className="w-full h-full object-cover"
           />
         ) : (
-          <div className="w-full h-full bg-slate-900 flex items-center justify-center" />
+          <div className="w-full h-full bg-gradient-to-r from-amber-700 via-amber-800 to-slate-900 flex items-center justify-center">
+            <span className="text-amber-200/50 text-xs font-black tracking-widest uppercase">
+              {artisan.name} · Atelier Certifié EDO
+            </span>
+          </div>
         )}
 
         <div className="absolute inset-0 bg-gradient-to-t from-slate-950/80 via-black/10 to-transparent" />
@@ -344,12 +348,25 @@ export const ArtisanProfile: React.FC<ArtisanProfileProps> = ({
                 Note globale : <b>{artisan.rating.toFixed(1)} / 5</b> ({artisan.reviewCount} avis)
               </p>
             </div>
-            <button
-              onClick={() => onOpenReviewModal(artisan)}
-              className="px-3.5 py-2 bg-amber-400 hover:bg-amber-500 text-slate-950 rounded-xl text-xs font-black transition-colors shadow-xs cursor-pointer"
-            >
-              ★ Noter cet artisan
-            </button>
+            <div className="flex items-center gap-2 flex-wrap">
+              <button
+                onClick={() => onOpenReviewModal(artisan)}
+                className="px-3.5 py-2 bg-amber-400 hover:bg-amber-500 text-slate-950 rounded-xl text-xs font-black transition-colors shadow-xs cursor-pointer"
+              >
+                ★ Noter cet artisan
+              </button>
+              <button
+                onClick={() => {
+                  sounds.playClick();
+                  window.open('https://efa-technologie.vercel.app', '_blank');
+                }}
+                className="px-3.5 py-2 bg-slate-900 hover:bg-slate-800 text-white rounded-xl text-xs font-bold transition-colors shadow-xs flex items-center gap-1.5 cursor-pointer"
+                title="Donner mon avis sur EFA TECHNOLOGIE"
+              >
+                <span>Donner mon avis</span>
+                <ExternalLink className="w-3.5 h-3.5" />
+              </button>
+            </div>
           </div>
 
           {!artisan.reviews || artisan.reviews.length === 0 ? (
