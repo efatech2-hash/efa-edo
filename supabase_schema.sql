@@ -111,14 +111,21 @@ VALUES ('efatech2@gmail.com', 'super_admin')
 ON CONFLICT (email) DO NOTHING;
 
 -- 4. Table des Avis Clients réels (reviews)
+-- Règle obligatoire : artisan_id est de type TEXT (artisans.id est TEXT, jamais UUID)
 CREATE TABLE IF NOT EXISTS public.reviews (
   id uuid primary key default gen_random_uuid(),
-  artisan_id text references public.artisans(id) on delete cascade,
+  artisan_id text not null,
+  client_id text,
+  client_phone text,
   client_name text not null,
   rating int not null check (rating >= 1 and rating <= 5),
   comment text,
   created_at timestamptz default now()
 );
+
+-- Colonnes additionnelles au cas où la table existait déjà
+ALTER TABLE public.reviews ADD COLUMN IF NOT EXISTS client_id text;
+ALTER TABLE public.reviews ADD COLUMN IF NOT EXISTS client_phone text;
 
 alter table public.reviews enable row level security;
 
@@ -131,6 +138,11 @@ drop policy if exists "Insertion publique reviews" on public.reviews;
 create policy "Insertion publique reviews"
   on public.reviews for insert
   with check (true);
+
+drop policy if exists "Modification publique reviews" on public.reviews;
+create policy "Modification publique reviews"
+  on public.reviews for update
+  using (true);
 
 -- 5. Table des Clients (clients)
 CREATE TABLE IF NOT EXISTS public.clients (

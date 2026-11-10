@@ -16,13 +16,15 @@ import {
   X,
   Share2
 } from 'lucide-react';
-import { Artisan, GeoCoordinates } from '../types';
+import { Artisan, GeoCoordinates, UserRole, CurrentUser } from '../types';
 import { ArtisanMap } from './ArtisanMap';
 import { speakAloud, sounds } from '../utils/audio';
 
 interface ArtisanProfileProps {
   artisan: Artisan;
   userLocation?: GeoCoordinates | null;
+  currentRole?: UserRole;
+  currentUser?: CurrentUser;
   onBack: () => void;
   onCall: (artisan: Artisan) => void;
   onOpenReviewModal: (artisan: Artisan) => void;
@@ -31,6 +33,8 @@ interface ArtisanProfileProps {
 export const ArtisanProfile: React.FC<ArtisanProfileProps> = ({
   artisan,
   userLocation,
+  currentRole = 'client',
+  currentUser,
   onBack,
   onCall,
   onOpenReviewModal,
@@ -235,7 +239,7 @@ export const ArtisanProfile: React.FC<ArtisanProfileProps> = ({
                 <span>{artisan.rating.toFixed(1)}</span>
               </div>
               <span className="text-xs font-bold text-slate-500">
-                {artisan.reviewCount} avis clients
+                {artisan.rating.toFixed(1)} ({artisan.reviewCount} avis)
               </span>
             </div>
 
@@ -349,23 +353,38 @@ export const ArtisanProfile: React.FC<ArtisanProfileProps> = ({
               </p>
             </div>
             <div className="flex items-center gap-2 flex-wrap">
-              <button
-                onClick={() => onOpenReviewModal(artisan)}
-                className="px-3.5 py-2 bg-amber-400 hover:bg-amber-500 text-slate-950 rounded-xl text-xs font-black transition-colors shadow-xs cursor-pointer"
-              >
-                ★ Noter cet artisan
-              </button>
-              <button
-                onClick={() => {
-                  sounds.playClick();
-                  window.open('https://efa-technologie.vercel.app', '_blank');
-                }}
-                className="px-3.5 py-2 bg-slate-900 hover:bg-slate-800 text-white rounded-xl text-xs font-bold transition-colors shadow-xs flex items-center gap-1.5 cursor-pointer"
-                title="Donner mon avis sur EFA TECHNOLOGIE"
-              >
-                <span>Donner mon avis</span>
-                <ExternalLink className="w-3.5 h-3.5" />
-              </button>
+              {currentRole === 'client' ? (
+                <>
+                  <button
+                    onClick={() => onOpenReviewModal(artisan)}
+                    className="px-3.5 py-2 bg-amber-400 hover:bg-amber-500 text-slate-950 rounded-xl text-xs font-black transition-colors shadow-xs cursor-pointer"
+                  >
+                    ★ Donner un avis
+                  </button>
+                  <button
+                    onClick={() => {
+                      sounds.playClick();
+                      window.open('https://efa-technologie.vercel.app', '_blank');
+                    }}
+                    className="px-3.5 py-2 bg-slate-900 hover:bg-slate-800 text-white rounded-xl text-xs font-bold transition-colors shadow-xs flex items-center gap-1.5 cursor-pointer"
+                    title="Donner mon avis sur EFA TECHNOLOGIE"
+                  >
+                    <span>Donner mon avis</span>
+                    <ExternalLink className="w-3.5 h-3.5" />
+                  </button>
+                </>
+              ) : (
+                <span
+                  onClick={() => {
+                    sounds.playClick();
+                    speakAloud("Seuls les clients peuvent donner un avis.");
+                  }}
+                  className="px-3 py-1.5 bg-slate-100 text-slate-500 rounded-xl text-xs font-bold border border-slate-200 cursor-pointer"
+                  title="Seuls les clients peuvent donner un avis"
+                >
+                  🔒 Seuls les clients peuvent donner un avis
+                </span>
+              )}
             </div>
           </div>
 
@@ -374,12 +393,18 @@ export const ArtisanProfile: React.FC<ArtisanProfileProps> = ({
               <p className="text-sm font-semibold text-slate-600">
                 Aucun avis pour l'instant. Soyez le premier à donner votre note après votre service !
               </p>
-              <button
-                onClick={() => onOpenReviewModal(artisan)}
-                className="mt-3 px-4 py-2 bg-slate-900 hover:bg-slate-800 text-white rounded-xl text-xs font-bold cursor-pointer"
-              >
-                Laisser un avis (1-5 étoiles)
-              </button>
+              {currentRole === 'client' ? (
+                <button
+                  onClick={() => onOpenReviewModal(artisan)}
+                  className="mt-3 px-4 py-2 bg-slate-900 hover:bg-slate-800 text-white rounded-xl text-xs font-bold cursor-pointer"
+                >
+                  Donner un avis (1-5 étoiles)
+                </button>
+              ) : (
+                <p className="text-xs font-bold text-slate-400 mt-2">
+                  🔒 Seuls les clients peuvent donner un avis
+                </p>
+              )}
             </div>
           ) : (
             <div className="space-y-3">

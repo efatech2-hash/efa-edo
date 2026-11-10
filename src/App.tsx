@@ -165,6 +165,7 @@ export default function App() {
   // Modals & view selection
   const [selectedArtisanProfile, setSelectedArtisanProfile] = useState<Artisan | null>(null);
   const [reviewModalArtisan, setReviewModalArtisan] = useState<Artisan | null>(null);
+  const [existingReviewForModal, setExistingReviewForModal] = useState<Review | null>(null);
   const [showProModal, setShowProModal] = useState<boolean>(false);
   const [showVoiceGuide, setShowVoiceGuide] = useState<boolean>(false);
   const [showAdminTradesModal, setShowAdminTradesModal] = useState<boolean>(false);
@@ -254,6 +255,9 @@ export default function App() {
                 .filter((r: any) => String(r.artisan_id) === artisanId)
                 .map((r: any) => ({
                   id: String(r.id),
+                  artisanId: String(r.artisan_id),
+                  clientId: String(r.client_id || ''),
+                  clientPhone: String(r.client_phone || ''),
                   author: r.client_name || r.author || 'Client vérifié',
                   rating: Number(r.rating || 5),
                   text: r.comment || r.text || '',
@@ -560,19 +564,93 @@ export default function App() {
     }, 3500);
   };
 
+  // Handler: Attempt to open review modal with Anti-Fake-Reviews checks
+  const handleAttemptOpenReviewModal = (artisan: Artisan) => {
+    // 1. RÈGLE : SEUL LE CLIENT PEUT NOTER
+    if (currentRole !== 'client') {
+      sounds.playClick();
+      speakAloud("Seuls les clients peuvent donner un avis.");
+      alert("Seuls les clients peuvent donner un avis");
+      return;
+    }
+
+    // 2. RÈGLE : 1 NUMÉRO = 1 SEUL AVIS PAR ARTISAN (vérif doublon avec artisan_id TEXT + client_phone)
+    const cleanClientPhone = (currentUser.phone || '').replace(/\D/g, '');
+    const clientPhoneSuffix = cleanClientPhone.length >= 8 ? cleanClientPhone.slice(-8) : cleanClientPhone;
+
+    const previousReview = artisan.reviews?.find((r) => {
+      const p = (r.clientPhone || '').replace(/\D/g, '');
+      const matchPhone =
+        (clientPhoneSuffix && p.endsWith(clientPhoneSuffix)) ||
+        (cleanClientPhone && p.includes(cleanClientPhone));
+      const matchId = currentUser.id && r.clientId && String(r.clientId) === String(currentUser.id);
+      return Boolean(matchPhone || matchId);
+    });
+
+    if (previousReview) {
+      setExistingReviewForModal(previousReview);
+      speakAloud("Tu as déjà noté cet artisan. Tu peux modifier ton avis, mais pas en donner un 2ème.");
+    } else {
+      setExistingReviewForModal(null);
+    }
+
+    setReviewModalArtisan(artisan);
+  };
+
   // Handler: Submit review with average rating recalculation & Supabase sync
-  const handleSubmitReview = async (artisanId: string, review: Review) => {
-    // 1. Local optimistic update
-    const targetArtisan = artisans.find((a) => a.id === artisanId);
+  const handleSubmitReview = async (artisanId: string, review: Review, isUpdate?: boolean) => {
+    const cleanArtisanId = String(artisanId);
+    const clientPhone = currentUser.phone ? String(currentUser.phone) : '';
+    const clientId = currentUser.id ? String(currentUser.id) : '';
+
+    // Check if review already exists for this client & artisan
+    const targetArtisan = artisans.find((a) => String(a.id) === cleanArtisanId);
     const existingReviews = targetArtisan?.reviews || [];
-    const updatedReviews = [review, ...existingReviews];
+
+    const cleanClientPhone = clientPhone.replace(/\D/g, '');
+    const clientPhoneSuffix = cleanClientPhone.length >= 8 ? cleanClientPhone.slice(-8) : cleanClientPhone;
+
+    const existingIndex = existingReviews.findIndex((r) => {
+      if (review.id && r.id === review.id) return true;
+      const p = (r.clientPhone || '').replace(/\D/g, '');
+      const matchPhone =
+        (clientPhoneSuffix && p.endsWith(clientPhoneSuffix)) ||
+        (cleanClientPhone && p.includes(cleanClientPhone));
+      const matchId = clientId && r.clientId && String(r.clientId) === String(clientId);
+      return Boolean(matchPhone || matchId);
+    });
+
+    const isEditMode = Boolean(isUpdate || existingIndex >= 0);
+    let updatedReviews: Review[];
+
+    if (isEditMode && existingIndex >= 0) {
+      const updatedItem: Review = {
+        ...existingReviews[existingIndex],
+        ...review,
+        artisanId: cleanArtisanId,
+        clientId,
+        clientPhone,
+      };
+      updatedReviews = [...existingReviews];
+      updatedReviews[existingIndex] = updatedItem;
+    } else {
+      const newReviewItem: Review = {
+        ...review,
+        artisanId: cleanArtisanId,
+        clientId,
+        clientPhone,
+      };
+      updatedReviews = [newReviewItem, ...existingReviews];
+    }
+
     const totalRating = updatedReviews.reduce((acc, r) => acc + r.rating, 0);
     const newAvgRating = parseFloat((totalRating / updatedReviews.length).toFixed(1));
     const newCount = updatedReviews.length;
 
+    // Local optimistic state update
     setArtisans((prev) =>
       prev.map((artisan) => {
-        if (artisan.id === artisanId) {
+        if (String(artisan.id) === cleanArtisanId) {
           return {
             ...artisan,
             reviews: updatedReviews,
@@ -585,7 +663,7 @@ export default function App() {
     );
 
     setSelectedArtisanProfile((prev) => {
-      if (prev && prev.id === artisanId) {
+      if (prev && String(prev.id) === cleanArtisanId) {
         return {
           ...prev,
           reviews: updatedReviews,
@@ -597,56 +675,85 @@ export default function App() {
     });
 
     setRecentCalledArtisan(null);
+    setExistingReviewForModal(null);
 
-    // Sauvegarde locale de secours
-    try {
-      const localReviewItem = {
-        id: review.id,
-        artisan_id: artisanId,
-        client_name: review.author || currentUser.name || 'Client vérifié',
-        rating: review.rating,
-        comment: review.text,
-        created_at: new Date().toISOString(),
-      };
-      const savedLocal = JSON.parse(localStorage.getItem('efa_edo_local_reviews') || '[]');
-      savedLocal.unshift(localReviewItem);
-      localStorage.setItem('efa_edo_local_reviews', JSON.stringify(savedLocal.slice(0, 50)));
-    } catch {
-      // ignore local write error
-    }
-
-    // 2. Vrai INSERT dans la table public.reviews et mise à jour de la note de l'artisan
+    // Supabase persistence: table public.reviews
     if (supabase) {
       try {
-        let clientId: string | null = null;
-        if (currentUser.id && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(currentUser.id)) {
-          clientId = currentUser.id;
+        if (isEditMode) {
+          const targetRevId = (existingIndex >= 0 && existingReviews[existingIndex].id) || review.id;
+          const { error: updErr } = await supabase
+            .from('reviews')
+            .update({
+              rating: review.rating,
+              comment: review.text,
+              client_name: review.author || currentUser.name || 'Client vérifié',
+              client_phone: clientPhone,
+              client_id: clientId || null,
+            })
+            .eq('id', targetRevId);
+
+          if (updErr && clientPhone) {
+            await supabase
+              .from('reviews')
+              .update({
+                rating: review.rating,
+                comment: review.text,
+                client_name: review.author || currentUser.name || 'Client vérifié',
+              })
+              .eq('artisan_id', cleanArtisanId)
+              .eq('client_phone', clientPhone);
+          }
+        } else {
+          // Verify no duplicate exists in DB before insert
+          let alreadyInDbId: string | null = null;
+          if (clientPhone) {
+            const { data: dupCheck } = await supabase
+              .from('reviews')
+              .select('id')
+              .eq('artisan_id', cleanArtisanId)
+              .eq('client_phone', clientPhone)
+              .limit(1);
+            if (dupCheck && dupCheck.length > 0) {
+              alreadyInDbId = dupCheck[0].id;
+            }
+          }
+
+          if (alreadyInDbId) {
+            await supabase
+              .from('reviews')
+              .update({
+                rating: review.rating,
+                comment: review.text,
+                client_name: review.author || currentUser.name || 'Client vérifié',
+              })
+              .eq('id', alreadyInDbId);
+          } else {
+            await supabase.from('reviews').insert([
+              {
+                artisan_id: cleanArtisanId,
+                client_id: clientId || null,
+                client_phone: clientPhone,
+                client_name: review.author || currentUser.name || 'Client vérifié',
+                rating: review.rating,
+                comment: review.text,
+              },
+            ]);
+          }
         }
 
-        const insertPayload: Record<string, any> = {
-          artisan_id: artisanId,
-          client_name: review.author || currentUser.name || 'Client vérifié',
-          rating: review.rating,
-          comment: review.text,
-        };
-        if (clientId) {
-          insertPayload.client_id = clientId;
-        }
-
-        await supabase.from('reviews').insert([insertPayload]);
-
-        // Toujours mettre à jour la note moyenne et le nombre d'avis dans la table artisans sur Supabase
+        // Always update average rating and review_count in table public.artisans
         await supabase
           .from('artisans')
           .update({
             rating: newAvgRating,
             review_count: newCount,
           })
-          .eq('id', artisanId);
+          .eq('id', cleanArtisanId);
 
         await loadArtisansFromSupabase();
-      } catch {
-        // ignore
+      } catch (err) {
+        console.error('Erreur Supabase reviews:', err);
       }
     }
   };
@@ -762,15 +869,21 @@ export default function App() {
             </div>
 
             <div className="flex items-center gap-2">
-              <button
-                onClick={() => {
-                  sounds.playClick();
-                  setReviewModalArtisan(recentCalledArtisan);
-                }}
-                className="px-4 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold text-xs shadow-xs active:scale-95 transition-transform"
-              >
-                Noter (1-5 étoiles)
-              </button>
+              {currentRole === 'client' ? (
+                <button
+                  onClick={() => {
+                    sounds.playClick();
+                    handleAttemptOpenReviewModal(recentCalledArtisan);
+                  }}
+                  className="px-4 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold text-xs shadow-xs active:scale-95 transition-transform"
+                >
+                  Noter (1-5 étoiles)
+                </button>
+              ) : (
+                <span className="text-xs font-bold text-slate-500 bg-white/80 px-3 py-1.5 rounded-xl border border-slate-200">
+                  Seuls les clients peuvent donner un avis
+                </span>
+              )}
               <button
                 onClick={() => setRecentCalledArtisan(null)}
                 className="p-2 text-slate-400 hover:text-slate-600"
@@ -786,9 +899,11 @@ export default function App() {
           <ArtisanProfile
             artisan={selectedArtisanProfile}
             userLocation={userLocation}
+            currentRole={currentRole}
+            currentUser={currentUser}
             onBack={() => setSelectedArtisanProfile(null)}
             onCall={handleCallInitiated}
-            onOpenReviewModal={(artisan) => setReviewModalArtisan(artisan)}
+            onOpenReviewModal={handleAttemptOpenReviewModal}
           />
         ) : (
           <>
@@ -800,7 +915,7 @@ export default function App() {
                 onSelectArtisan={(artisan) => setSelectedArtisanProfile(artisan)}
                 onCallInitiated={handleCallInitiated}
                 onOpenVoiceAssistant={() => setShowVoiceGuide(true)}
-                onOpenReviewModal={(artisan) => setReviewModalArtisan(artisan)}
+                onOpenReviewModal={handleAttemptOpenReviewModal}
                 onRefreshGps={() => refreshClientGps(true)}
                 isGpsLoading={isGpsLoading}
               />
@@ -929,7 +1044,11 @@ export default function App() {
       {reviewModalArtisan && (
         <ReviewModal
           artisan={reviewModalArtisan}
-          onClose={() => setReviewModalArtisan(null)}
+          existingReview={existingReviewForModal}
+          onClose={() => {
+            setReviewModalArtisan(null);
+            setExistingReviewForModal(null);
+          }}
           onSubmitReview={handleSubmitReview}
         />
       )}

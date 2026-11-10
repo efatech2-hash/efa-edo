@@ -12,18 +12,21 @@ import { speakAloud, startVoiceRecognition, sounds } from '../utils/audio';
 
 interface ReviewModalProps {
   artisan: Artisan;
+  existingReview?: Review | null;
   onClose: () => void;
-  onSubmitReview: (artisanId: string, review: Review) => void;
+  onSubmitReview: (artisanId: string, review: Review, isUpdate?: boolean) => void;
 }
 
 export const ReviewModal: React.FC<ReviewModalProps> = ({
   artisan,
+  existingReview = null,
   onClose,
   onSubmitReview,
 }) => {
-  const [rating, setRating] = useState<number>(5);
-  const [authorName, setAuthorName] = useState('Client satisfait');
-  const [commentText, setCommentText] = useState('');
+  const isEditing = Boolean(existingReview);
+  const [rating, setRating] = useState<number>(existingReview?.rating ?? 5);
+  const [authorName, setAuthorName] = useState(existingReview?.author || 'Client satisfait');
+  const [commentText, setCommentText] = useState(existingReview?.text || '');
   const [isRecording, setIsRecording] = useState(false);
   const [hasRecordedAudio, setHasRecordedAudio] = useState(false);
 
@@ -73,8 +76,8 @@ export const ReviewModal: React.FC<ReviewModalProps> = ({
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     sounds.playSuccess();
-    const newRev: Review = {
-      id: `rev-${Date.now()}`,
+    const revToSave: Review = {
+      id: existingReview?.id || `rev-${Date.now()}`,
       author: authorName.trim() || 'Client vérifié',
       rating: rating,
       text: commentText.trim() || 'Travail très soigné et rapide. Je recommande !',
@@ -82,9 +85,13 @@ export const ReviewModal: React.FC<ReviewModalProps> = ({
       hasAudio: hasRecordedAudio,
       audioDuration: hasRecordedAudio ? '0:15' : undefined,
     };
-    onSubmitReview(artisan.id, newRev);
+    onSubmitReview(artisan.id, revToSave, isEditing);
     onClose();
-    speakAloud(`Merci beaucoup pour votre avis sur ${artisan.name}. C'est enregistré !`);
+    speakAloud(
+      isEditing
+        ? `Votre avis sur ${artisan.name} a été mis à jour avec succès.`
+        : `Merci beaucoup pour votre avis sur ${artisan.name}. C'est enregistré !`
+    );
   };
 
   return (
@@ -129,12 +136,22 @@ export const ReviewModal: React.FC<ReviewModalProps> = ({
             </div>
           )}
           <h2 className="text-2xl font-black text-slate-900">
-            Comment s'est passé le travail ?
+            {isEditing ? "Modifier mon avis" : "Comment s'est passé le travail ?"}
           </h2>
           <p className="text-sm font-semibold text-slate-600 mt-1">
             Artisan : <span className="text-amber-700 font-bold">{artisan.name}</span> ({artisan.trade})
           </p>
         </div>
+
+        {/* Banner si modification d'un avis existant */}
+        {isEditing && (
+          <div className="mb-4 p-3 rounded-2xl bg-amber-50 border border-amber-300 text-amber-900 text-xs font-bold flex items-start gap-2 text-left">
+            <span className="text-base shrink-0">ℹ️</span>
+            <span>
+              Tu as déjà noté cet artisan. Tu peux modifier ton avis, mais pas en donner un 2ème.
+            </span>
+          </div>
+        )}
 
         {/* 5 Giant Stars */}
         <div className="flex items-center justify-center gap-2 mb-6">
@@ -210,10 +227,12 @@ export const ReviewModal: React.FC<ReviewModalProps> = ({
         {/* Submit Button: Big tactile 56px */}
         <button
           onClick={handleSubmit}
-          className="w-full min-h-[58px] rounded-2xl bg-emerald-600 hover:bg-emerald-700 text-white text-lg font-black flex items-center justify-center gap-2 shadow-lg shadow-emerald-900/10 active:scale-[0.98] transition-transform"
+          className="w-full min-h-[58px] rounded-2xl bg-emerald-600 hover:bg-emerald-700 text-white text-lg font-black flex items-center justify-center gap-2 shadow-lg shadow-emerald-900/10 active:scale-[0.98] transition-transform cursor-pointer"
         >
           <Check className="w-6 h-6 stroke-[3]" />
-          Envoyer ma note ({rating}/5 étoiles)
+          <span>
+            {isEditing ? `Mettre à jour mon avis (${rating}/5)` : `Envoyer ma note (${rating}/5 étoiles)`}
+          </span>
         </button>
       </div>
     </div>
