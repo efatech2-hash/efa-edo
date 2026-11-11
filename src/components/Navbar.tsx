@@ -7,6 +7,7 @@ import {
   RotateCcw,
   Menu,
   X,
+  LogOut,
 } from 'lucide-react';
 import { CurrentUser, UserRole } from '../types';
 import { speakAloud, sounds, isAudioMuted, toggleAudioMute } from '../utils/audio';
@@ -19,6 +20,7 @@ interface NavbarProps {
   onSwitchRole: (role: UserRole) => void;
   onBecomeArtisan?: () => void;
   onRestartOnboarding: () => void;
+  onLogout?: () => void;
   onOpenVoiceGuide: () => void;
   onOpenAdminTrades?: () => void;
   onOpenAdminPage?: () => void;
@@ -34,6 +36,7 @@ export const Navbar: React.FC<NavbarProps> = ({
   onSwitchRole,
   onBecomeArtisan,
   onRestartOnboarding,
+  onLogout,
   onOpenVoiceGuide,
   onOpenAdminTrades,
   onOpenAdminPage,
@@ -217,6 +220,21 @@ export const Navbar: React.FC<NavbarProps> = ({
           >
             <RotateCcw className="w-4 h-4" />
           </button>
+
+          {/* Déconnexion */}
+          {onLogout && (
+            <button
+              onClick={() => {
+                sounds.playClick();
+                onLogout();
+              }}
+              className="p-2 rounded-xl bg-rose-500/15 hover:bg-rose-500/25 text-rose-300 hover:text-rose-200 border border-rose-500/30 transition-colors cursor-pointer"
+              title="Déconnexion (Quitter)"
+              aria-label="Déconnexion"
+            >
+              <LogOut className="w-4 h-4" />
+            </button>
+          )}
         </div>
 
         {/* Mobile Action Zone: (< 768px, specifically 360px+) */}
@@ -395,6 +413,24 @@ export const Navbar: React.FC<NavbarProps> = ({
             </div>
             <span className="text-[10px] text-slate-400">Recommencer</span>
           </button>
+
+          {/* Déconnexion Mobile */}
+          {onLogout && (
+            <button
+              onClick={() => {
+                sounds.playClick();
+                setIsMobileMenuOpen(false);
+                onLogout();
+              }}
+              className="w-full min-h-[46px] rounded-xl bg-rose-500/15 hover:bg-rose-500/25 border border-rose-500/30 text-rose-300 hover:text-rose-200 font-bold text-xs flex items-center justify-between px-4 transition-colors active:scale-[0.98] cursor-pointer"
+            >
+              <div className="flex items-center gap-2">
+                <LogOut className="w-4 h-4 text-rose-400" />
+                <span>Déconnexion</span>
+              </div>
+              <span className="text-[10px] text-rose-400 font-bold">Quitter</span>
+            </button>
+          )}
         </div>
       )}
     </header>

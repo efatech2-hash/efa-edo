@@ -79,39 +79,63 @@ export default function App() {
   });
   const [isGpsLoading, setIsGpsLoading] = useState(false);
 
-  // Current session user
-  const [currentUser, setCurrentUser] = useState<CurrentUser>(() => {
+  // Helper: check if a valid, authenticated user session exists in local storage
+  const getStoredUserSession = (): { user: CurrentUser | null; hasSession: boolean } => {
     try {
-      const saved = localStorage.getItem('efa_edo_user');
-      return saved
-        ? JSON.parse(saved)
-        : {
-            id: 'user-client-default',
-            role: 'client',
-            phone: '+228 90 12 34 56',
-            name: 'Client EDO',
-            artisanId: 'art-1',
-            lat: DEFAULT_AFRICA_COORDS.lat,
-            lng: DEFAULT_AFRICA_COORDS.lng,
-          };
+      if (typeof window === 'undefined') return { user: null, hasSession: false };
+      const savedUserStr = localStorage.getItem('efa_edo_user');
+      const sessionActive = localStorage.getItem('efa_edo_session_active');
+
+      if (!savedUserStr || sessionActive !== 'true') {
+        return { user: null, hasSession: false };
+      }
+
+      const parsed = JSON.parse(savedUserStr);
+      if (
+        parsed &&
+        typeof parsed === 'object' &&
+        parsed.phone &&
+        parsed.id &&
+        parsed.id !== 'user-client-default'
+      ) {
+        return { user: parsed, hasSession: true };
+      }
+      // If legacy placeholder found, purge it
+      localStorage.removeItem('efa_edo_user');
+      localStorage.removeItem('efa_edo_session_active');
+      return { user: null, hasSession: false };
     } catch {
-      return {
-        id: 'user-client-default',
-        role: 'client',
-        phone: '+228 90 12 34 56',
-        name: 'Client EDO',
-        artisanId: 'art-1',
-        lat: DEFAULT_AFRICA_COORDS.lat,
-        lng: DEFAULT_AFRICA_COORDS.lng,
-      };
+      return { user: null, hasSession: false };
     }
+  };
+
+  // Current session user: empty/unauthenticated by default when cache is empty (NO auto-login)
+  const [currentUser, setCurrentUser] = useState<CurrentUser>(() => {
+    const session = getStoredUserSession();
+    if (session.hasSession && session.user) {
+      return session.user;
+    }
+    return {
+      id: '',
+      role: 'client',
+      phone: '',
+      name: '',
+      lat: DEFAULT_AFRICA_COORDS.lat,
+      lng: DEFAULT_AFRICA_COORDS.lng,
+    };
   });
 
-  // Active onboarding state
-  const [hasCompletedOnboarding, setHasCompletedOnboarding] = useState<boolean>(true);
+  // Active onboarding / auth state: true ONLY if an active session exists in localStorage
+  const [hasCompletedOnboarding, setHasCompletedOnboarding] = useState<boolean>(() => {
+    const session = getStoredUserSession();
+    return session.hasSession;
+  });
 
   // Navigation tab and role
-  const [currentRole, setCurrentRole] = useState<UserRole>('client');
+  const [currentRole, setCurrentRole] = useState<UserRole>(() => {
+    const session = getStoredUserSession();
+    return session.user?.role || 'client';
+  });
   const [activeTab, setActiveTab] = useState<'home' | 'map' | 'artisan' | 'pro' | 'voice'>('home');
 
   // Super Admin view route state: /admin or #admin
@@ -344,10 +368,18 @@ export default function App() {
     }
   }, [customTrades]);
 
-  // Save current user to localStorage
+  // Save current user to localStorage ONLY if authenticated
   useEffect(() => {
     try {
-      localStorage.setItem('efa_edo_user', JSON.stringify(currentUser));
+      if (
+        currentUser &&
+        currentUser.phone &&
+        currentUser.id &&
+        currentUser.id !== 'user-client-default'
+      ) {
+        localStorage.setItem('efa_edo_user', JSON.stringify(currentUser));
+        localStorage.setItem('efa_edo_session_active', 'true');
+      }
     } catch {
       // fallback
     }
@@ -356,10 +388,15 @@ export default function App() {
   // User's own artisan record if registered
   const userArtisanRecord = currentUser.artisanId
     ? artisans.find((a) => a.id === currentUser.artisanId)
+    : currentUser.phone
+    ? artisans.find((a) => a.phone && a.phone.replace(/\D/g, '') === currentUser.phone.replace(/\D/g, ''))
     : undefined;
   const hasArtisanProfile = Boolean(userArtisanRecord);
   const currentArtisanProfile =
-    userArtisanRecord || (currentUser.role === 'artisan' && artisans.length > 0 ? artisans[0] : null);
+    userArtisanRecord ||
+    (currentUser.role === 'artisan' && currentUser.phone
+      ? artisans.find((a) => a.phone && a.phone.replace(/\D/g, '') === currentUser.phone.replace(/\D/g, '')) || null
+      : null);
 
   const handleStartArtisanRegistration = () => {
     sounds.playClick();
@@ -415,7 +452,17 @@ export default function App() {
   ) => {
     // Si c'est un client, connexion directe
     if (user.role === 'client') {
-      setCurrentUser(user);
+      const userToSave: CurrentUser = {
+        ...user,
+        id: user.id || `user-${Date.now()}`,
+      };
+      try {
+        localStorage.setItem('efa_edo_user', JSON.stringify(userToSave));
+        localStorage.setItem('efa_edo_session_active', 'true');
+      } catch {
+        // ignore
+      }
+      setCurrentUser(userToSave);
       setCurrentRole('client');
       setHasCompletedOnboarding(true);
       setActiveTab('home');
@@ -424,7 +471,17 @@ export default function App() {
 
     // Si c'est un artisan qui se reconnecte ("J'ai déjà un compte")
     if (user.role === 'artisan' && !artisanData) {
-      setCurrentUser(user);
+      const userToSave: CurrentUser = {
+        ...user,
+        id: user.id || `artisan-${Date.now()}`,
+      };
+      try {
+        localStorage.setItem('efa_edo_user', JSON.stringify(userToSave));
+        localStorage.setItem('efa_edo_session_active', 'true');
+      } catch {
+        // ignore
+      }
+      setCurrentUser(userToSave);
       setCurrentRole('artisan');
       setHasCompletedOnboarding(true);
       setActiveTab('artisan');
@@ -527,14 +584,69 @@ export default function App() {
       await loadArtisansFromSupabase();
 
       // 4. Activer le compte pour l'utilisateur
-      setCurrentUser({
+      const createdUser: CurrentUser = {
         ...user,
         artisanId: data?.id ? String(data.id) : user.id,
-      });
+      };
+      try {
+        localStorage.setItem('efa_edo_user', JSON.stringify(createdUser));
+        localStorage.setItem('efa_edo_session_active', 'true');
+      } catch {
+        // ignore
+      }
+      setCurrentUser(createdUser);
       setCurrentRole('artisan');
       setHasCompletedOnboarding(true);
       setActiveTab('artisan');
     }
+  };
+
+  // Handler: Full Logout (supprime tout : token, user, session, cache et renvoie vers Connexion)
+  const handleLogout = () => {
+    sounds.playClick();
+    speakAloud("Déconnexion réussie. À bientôt sur EFA EDO.");
+
+    try {
+      localStorage.removeItem('efa_edo_user');
+      localStorage.removeItem('efa_edo_session_active');
+      localStorage.removeItem('efa_edo_user_coords');
+      localStorage.removeItem('efa_edo_intro_seen');
+      localStorage.removeItem('efa_edo_local_reviews');
+      localStorage.removeItem('efa_edo_custom_trades');
+    } catch {
+      // ignore
+    }
+
+    try {
+      sessionStorage.clear();
+    } catch {
+      // ignore
+    }
+
+    try {
+      if (typeof window !== 'undefined' && window.indexedDB) {
+        window.indexedDB.databases?.().then((dbs) => {
+          dbs.forEach((db) => {
+            if (db.name) window.indexedDB.deleteDatabase(db.name);
+          });
+        });
+      }
+    } catch {
+      // ignore
+    }
+
+    setCurrentUser({
+      id: '',
+      role: 'client',
+      phone: '',
+      name: '',
+      lat: DEFAULT_AFRICA_COORDS.lat,
+      lng: DEFAULT_AFRICA_COORDS.lng,
+    });
+    setCurrentRole('client');
+    setSelectedArtisanProfile(null);
+    setRecentCalledArtisan(null);
+    setHasCompletedOnboarding(false);
   };
 
   // Handler: Toggle Artisan Availability
@@ -787,7 +899,7 @@ export default function App() {
         )}
         <Onboarding
           onComplete={handleOnboardingComplete}
-          onCancel={() => setHasCompletedOnboarding(true)}
+          onCancel={currentUser.phone ? () => setHasCompletedOnboarding(true) : undefined}
           onSaveCustomTrade={handleSaveCustomTrade}
           initialCoords={userLocation}
         />
@@ -823,6 +935,7 @@ export default function App() {
           sounds.playClick();
           setHasCompletedOnboarding(false);
         }}
+        onLogout={handleLogout}
         onOpenVoiceGuide={() => setShowVoiceGuide(true)}
         onOpenAdminTrades={() => setShowAdminTradesModal(true)}
         customTradesCount={customTrades.length}
