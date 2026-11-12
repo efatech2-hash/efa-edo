@@ -70,6 +70,7 @@ export interface Artisan {
   completedJobs: number;
   voiceNoteUrl?: string;
   bioVoiceText: string;
+  description?: string;
   reviews: Review[];
   dailyViews: number;
   dailyCalls: number;
@@ -99,6 +100,7 @@ export interface CurrentUser {
   phone: string;
   name: string;
   addressDetail?: string;
+  description?: string;
   lat?: number;
   lng?: number;
   avatar?: string;

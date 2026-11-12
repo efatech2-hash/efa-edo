@@ -4,7 +4,6 @@ import {
   Volume2,
   VolumeX,
   User,
-  RotateCcw,
   Menu,
   X,
   LogOut,
@@ -19,7 +18,7 @@ interface NavbarProps {
   hasArtisanProfile?: boolean;
   onSwitchRole: (role: UserRole) => void;
   onBecomeArtisan?: () => void;
-  onRestartOnboarding: () => void;
+  onRestartOnboarding?: () => void;
   onLogout?: () => void;
   onOpenVoiceGuide: () => void;
   onOpenAdminTrades?: () => void;
@@ -208,19 +207,6 @@ export const Navbar: React.FC<NavbarProps> = ({
             )}
           </button>
 
-          {/* Restart Onboarding */}
-          <button
-            onClick={() => {
-              sounds.playClick();
-              onRestartOnboarding();
-            }}
-            className="p-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white border border-slate-700 transition-colors cursor-pointer"
-            title="Relancer l'onboarding (30s)"
-            aria-label="Recommencer"
-          >
-            <RotateCcw className="w-4 h-4" />
-          </button>
-
           {/* Déconnexion */}
           {onLogout && (
             <button
@@ -396,22 +382,6 @@ export const Navbar: React.FC<NavbarProps> = ({
               <span>Assistance Vocale & Guide Audio</span>
             </div>
             <span className="text-[10px] text-amber-400 font-bold">Écouter</span>
-          </button>
-
-          {/* Restart Onboarding */}
-          <button
-            onClick={() => {
-              sounds.playClick();
-              setIsMobileMenuOpen(false);
-              onRestartOnboarding();
-            }}
-            className="w-full min-h-[46px] rounded-xl bg-slate-800/60 hover:bg-slate-800 border border-slate-700 text-slate-300 hover:text-white font-bold text-xs flex items-center justify-between px-4 transition-colors active:scale-[0.98]"
-          >
-            <div className="flex items-center gap-2">
-              <RotateCcw className="w-4 h-4 text-slate-400" />
-              <span>Relancer l'onboarding (30s)</span>
-            </div>
-            <span className="text-[10px] text-slate-400">Recommencer</span>
           </button>
 
           {/* Déconnexion Mobile */}

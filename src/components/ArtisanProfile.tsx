@@ -14,7 +14,9 @@ import {
   Pause,
   Maximize2,
   X,
-  Share2
+  Share2,
+  Sparkles,
+  FileText,
 } from 'lucide-react';
 import { Artisan, GeoCoordinates, UserRole, CurrentUser } from '../types';
 import { ArtisanMap } from './ArtisanMap';
@@ -42,6 +44,21 @@ export const ArtisanProfile: React.FC<ArtisanProfileProps> = ({
   const [isPlayingBio, setIsPlayingBio] = useState(false);
   const [activePhoto, setActivePhoto] = useState<string | null>(null);
 
+  const rawAddress = artisan.addressDetail?.trim() || '';
+  const isDemoAddress =
+    rawAddress.toLowerCase().includes('dépannage express') ||
+    rawAddress.toLowerCase().includes('atelier & dépannage') ||
+    rawAddress.toLowerCase() === 'atelier';
+  const displayAddress = !isDemoAddress && rawAddress.length > 0 ? rawAddress : '';
+
+  const rawBio = artisan.bioVoiceText?.trim() || '';
+  const isDemoBio =
+    rawBio.toLowerCase().includes('dépannage express') ||
+    rawBio.toLowerCase().includes('atelier & dépannage') ||
+    rawBio.startsWith('TEL2:');
+  const displayBio = !isDemoBio && rawBio.length > 0 ? rawBio : '';
+  const artisanDescription = (artisan.description?.trim() || displayBio).trim();
+
   const togglePlayBio = () => {
     sounds.playClick();
     if (isPlayingBio) {
@@ -49,7 +66,8 @@ export const ArtisanProfile: React.FC<ArtisanProfileProps> = ({
       setIsPlayingBio(false);
     } else {
       setIsPlayingBio(true);
-      speakAloud(artisan.bioVoiceText || `Artisan ${artisan.name}`, () => {
+      const textToRead = artisanDescription || `Artisan ${artisan.name}, spécialiste ${artisan.trade}`;
+      speakAloud(textToRead, () => {
         setIsPlayingBio(false);
       });
     }
@@ -85,20 +103,6 @@ export const ArtisanProfile: React.FC<ArtisanProfileProps> = ({
   const distanceText =
     artisan.distanceBadge ||
     (artisan.distanceKm !== undefined ? `à ${artisan.distanceKm.toFixed(1)}km` : 'À proximité');
-
-  // Filtrer les textes démo : n'afficher que ce que l'artisan a réellement saisi
-  const rawAddress = artisan.addressDetail?.trim() || '';
-  const isDemoAddress =
-    rawAddress.toLowerCase().includes('dépannage express') ||
-    rawAddress.toLowerCase().includes('atelier & dépannage') ||
-    rawAddress.toLowerCase() === 'atelier';
-  const displayAddress = !isDemoAddress && rawAddress.length > 0 ? rawAddress : '';
-
-  const rawBio = artisan.bioVoiceText?.trim() || '';
-  const isDemoBio =
-    rawBio.toLowerCase().includes('dépannage express') ||
-    rawBio.toLowerCase().includes('atelier & dépannage');
-  const displayBio = !isDemoBio && rawBio.length > 0 ? rawBio : '';
 
   const realPhotos = artisan.workPhotos || [];
 
@@ -262,39 +266,41 @@ export const ArtisanProfile: React.FC<ArtisanProfileProps> = ({
             </div>
           </div>
 
-          {/* Présentation vocale : Uniquement si du texte personnalisé existe */}
-          {displayBio ? (
-            <div className="mt-4 p-4 rounded-2xl bg-amber-50 border border-amber-200 flex items-center justify-between gap-3">
-              <div className="flex items-center gap-3">
-                <button
-                  onClick={togglePlayBio}
-                  className="w-12 h-12 rounded-2xl bg-amber-500 hover:bg-amber-600 text-slate-950 flex items-center justify-center shadow-xs active:scale-95 transition-transform shrink-0 cursor-pointer"
-                  aria-label={isPlayingBio ? 'Pause' : 'Écouter'}
-                >
-                  {isPlayingBio ? (
-                    <Pause className="w-6 h-6 fill-slate-950" />
-                  ) : (
-                    <Play className="w-6 h-6 fill-slate-950 ml-0.5" />
+          {/* Présentation / Description de l'artisan (Style présentation : "Je suis un artisan tel...") */}
+          {artisanDescription ? (
+            <div className="mt-4 p-4 sm:p-5 rounded-2xl bg-amber-50/90 border border-amber-200 shadow-2xs">
+              <div className="flex items-center justify-between gap-3 mb-2.5">
+                <span className="text-xs font-black uppercase tracking-wider text-amber-900 flex items-center gap-1.5">
+                  <Sparkles className="w-4 h-4 text-amber-600" />
+                  <span>Présentation de l'artisan</span>
+                </span>
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={togglePlayBio}
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-amber-400 hover:bg-amber-500 text-slate-950 text-xs font-black transition-all active:scale-95 cursor-pointer shadow-xs"
+                    aria-label={isPlayingBio ? 'Pause' : 'Écouter'}
+                    title="Écouter la présentation"
+                  >
+                    {isPlayingBio ? (
+                      <Pause className="w-3.5 h-3.5 fill-slate-950" />
+                    ) : (
+                      <Play className="w-3.5 h-3.5 fill-slate-950 ml-0.5" />
+                    )}
+                    <span>{isPlayingBio ? 'Pause' : 'Écouter'}</span>
+                  </button>
+                  {isPlayingBio && (
+                    <div className="flex items-end gap-1 h-5">
+                      <span className="w-1 bg-amber-600 rounded-full soundwave-bar-1" />
+                      <span className="w-1 bg-amber-600 rounded-full soundwave-bar-2" />
+                      <span className="w-1 bg-amber-600 rounded-full soundwave-bar-3" />
+                      <span className="w-1 bg-amber-600 rounded-full soundwave-bar-4" />
+                    </div>
                   )}
-                </button>
-                <div>
-                  <span className="text-xs font-bold uppercase tracking-wider text-amber-900">
-                    Présentation vocale de l'artisan
-                  </span>
-                  <p className="text-sm text-slate-800 font-medium line-clamp-1">
-                    « {displayBio} »
-                  </p>
                 </div>
               </div>
-
-              {isPlayingBio && (
-                <div className="flex items-end gap-1 h-6">
-                  <span className="w-1 bg-amber-600 rounded-full soundwave-bar-1" />
-                  <span className="w-1 bg-amber-600 rounded-full soundwave-bar-2" />
-                  <span className="w-1 bg-amber-600 rounded-full soundwave-bar-3" />
-                  <span className="w-1 bg-amber-600 rounded-full soundwave-bar-4" />
-                </div>
-              )}
+              <p className="text-sm sm:text-base text-slate-800 font-medium leading-relaxed whitespace-pre-line italic">
+                « {artisanDescription} »
+              </p>
             </div>
           ) : null}
         </div>

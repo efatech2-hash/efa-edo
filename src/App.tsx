@@ -337,6 +337,7 @@ export default function App() {
               reviewCount: computedReviewCount,
               completedJobs: Number(item.completedJobs ?? item.completed_jobs ?? 0),
               bioVoiceText: rawBio,
+              description: item.description || (rawBio && !rawBio.includes('TEL2:') ? rawBio : ''),
               reviews: matchedReviews,
               dailyViews: Number(item.dailyViews ?? item.daily_views ?? 0),
               dailyCalls: Number(item.dailyCalls ?? item.daily_calls ?? 0),

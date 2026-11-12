@@ -16,6 +16,10 @@ import {
   RotateCcw,
   ShieldCheck,
   ExternalLink,
+  Share2,
+  Copy,
+  Check,
+  X,
 } from 'lucide-react';
 import { Artisan, GeoCoordinates } from '../types';
 import { CATEGORIES_DATA } from '../data/categories';
@@ -52,6 +56,73 @@ export const HomeClient: React.FC<HomeClientProps> = ({
   const [viewMode, setViewMode] = useState<'both' | 'map' | 'list'>('both');
   const [isListening, setIsListening] = useState(false);
   const [voiceNotice, setVoiceNotice] = useState<string | null>(null);
+  const [isShareModalOpen, setIsShareModalOpen] = useState(false);
+  const [hasCopiedLink, setHasCopiedLink] = useState(false);
+
+  const getAppShareUrl = () => {
+    if (typeof window !== 'undefined') {
+      return window.location.origin;
+    }
+    return 'https://efa-edo.vercel.app';
+  };
+
+  const handleCopyLink = async () => {
+    sounds.playClick();
+    const url = getAppShareUrl();
+    try {
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        await navigator.clipboard.writeText(url);
+      } else {
+        const textarea = document.createElement('textarea');
+        textarea.value = url;
+        textarea.style.position = 'fixed';
+        textarea.style.opacity = '0';
+        document.body.appendChild(textarea);
+        textarea.select();
+        document.execCommand('copy');
+        document.body.removeChild(textarea);
+      }
+      setHasCopiedLink(true);
+      sounds.playSuccess();
+      speakAloud("Lien copié dans le presse-papier !");
+      setTimeout(() => setHasCopiedLink(false), 2500);
+    } catch {
+      alert("Lien : " + url);
+    }
+  };
+
+  const handleShareWhatsApp = () => {
+    sounds.playClick();
+    const url = getAppShareUrl();
+    const text = encodeURIComponent(
+      `Trouve un artisan professionnel près de toi en 30 secondes sur EFA EDO ! ${url}`
+    );
+    window.open(`https://wa.me/?text=${text}`, '_blank');
+  };
+
+  const handleShareFacebook = () => {
+    sounds.playClick();
+    const url = encodeURIComponent(getAppShareUrl());
+    window.open(`https://www.facebook.com/sharer/sharer.php?u=${url}`, '_blank');
+  };
+
+  const handleNativeShare = async () => {
+    sounds.playClick();
+    const url = getAppShareUrl();
+    if (navigator.share) {
+      try {
+        await navigator.share({
+          title: 'EFA EDO - Marketplace des Artisans',
+          text: 'Trouve un artisan pro près de toi en 30 secondes sur EFA EDO !',
+          url,
+        });
+      } catch {
+        // user cancelled
+      }
+    } else {
+      setIsShareModalOpen(true);
+    }
+  };
 
   // Micro voice search handler
   const handleStartVoiceSearch = () => {
@@ -269,18 +340,34 @@ export const HomeClient: React.FC<HomeClientProps> = ({
           </div>
         </div>
 
-        <button
-          onClick={() => {
-            sounds.playClick();
-            onRefreshGps();
-          }}
-          disabled={isGpsLoading}
-          className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-xs font-extrabold text-white border border-slate-700 active:scale-95 transition-transform shrink-0"
-          title="Actualiser ma position GPS"
-        >
-          <RotateCcw className={`w-3.5 h-3.5 text-amber-400 ${isGpsLoading ? 'animate-spin' : ''}`} />
-          <span className="hidden sm:inline">{isGpsLoading ? 'Recherche...' : 'GPS'}</span>
-        </button>
+        <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
+          {/* Bouton Partager Client - Discret mais visible responsive mobile + desktop */}
+          <button
+            onClick={() => {
+              sounds.playClick();
+              setIsShareModalOpen(true);
+            }}
+            className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-amber-400 hover:bg-amber-500 text-slate-950 text-xs font-black shadow-xs active:scale-95 transition-transform cursor-pointer"
+            title="Partager l'application EFA EDO"
+            aria-label="Partager"
+          >
+            <Share2 className="w-3.5 h-3.5" />
+            <span className="hidden xs:inline sm:inline">Partager</span>
+          </button>
+
+          <button
+            onClick={() => {
+              sounds.playClick();
+              onRefreshGps();
+            }}
+            disabled={isGpsLoading}
+            className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-xs font-extrabold text-white border border-slate-700 active:scale-95 transition-transform shrink-0 cursor-pointer"
+            title="Actualiser ma position GPS"
+          >
+            <RotateCcw className={`w-3.5 h-3.5 text-amber-400 ${isGpsLoading ? 'animate-spin' : ''}`} />
+            <span className="hidden sm:inline">{isGpsLoading ? 'Recherche...' : 'GPS'}</span>
+          </button>
+        </div>
       </section>
 
       {/* Search Header with Voice Button */}
@@ -832,6 +919,88 @@ export const HomeClient: React.FC<HomeClientProps> = ({
             </div>
           )}
         </section>
+      )}
+
+      {/* Share Modal - WhatsApp, Facebook, Copier le lien, Partage natif */}
+      {isShareModalOpen && (
+        <div className="fixed inset-0 z-50 bg-black/75 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-white w-full max-w-sm rounded-3xl p-6 shadow-2xl border-2 border-amber-400 relative animate-in fade-in zoom-in-95 duration-150">
+            <button
+              onClick={() => {
+                sounds.playClick();
+                setIsShareModalOpen(false);
+              }}
+              className="absolute top-4 right-4 w-9 h-9 rounded-full bg-slate-100 hover:bg-slate-200 flex items-center justify-center text-slate-700 cursor-pointer"
+              aria-label="Fermer"
+            >
+              <X className="w-4 h-4" />
+            </button>
+
+            <div className="text-center mb-5">
+              <div className="w-14 h-14 rounded-2xl bg-amber-400 text-slate-950 flex items-center justify-center mx-auto mb-2 shadow-md">
+                <Share2 className="w-7 h-7" />
+              </div>
+              <h3 className="text-xl font-black text-slate-900">Partager EFA EDO</h3>
+              <p className="text-xs font-bold text-slate-500 mt-1">
+                Fais découvrir l'application d'artisans africains à tes proches !
+              </p>
+            </div>
+
+            <div className="space-y-2.5 mb-5">
+              {/* WhatsApp */}
+              <button
+                onClick={handleShareWhatsApp}
+                className="w-full py-3 px-4 rounded-2xl bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold text-sm flex items-center justify-center gap-2.5 shadow-sm active:scale-98 transition-transform cursor-pointer"
+              >
+                <MessageCircle className="w-5 h-5 fill-white" />
+                <span>Partager sur WhatsApp</span>
+              </button>
+
+              {/* Facebook */}
+              <button
+                onClick={handleShareFacebook}
+                className="w-full py-3 px-4 rounded-2xl bg-[#1877F2] hover:bg-[#166fe5] text-white font-extrabold text-sm flex items-center justify-center gap-2.5 shadow-sm active:scale-98 transition-transform cursor-pointer"
+              >
+                <span className="w-5 h-5 rounded-full bg-white text-[#1877F2] font-black flex items-center justify-center text-xs">f</span>
+                <span>Partager sur Facebook</span>
+              </button>
+
+              {/* Copier le lien */}
+              <button
+                onClick={handleCopyLink}
+                className={`w-full py-3 px-4 rounded-2xl border-2 font-extrabold text-sm flex items-center justify-center gap-2.5 transition-all cursor-pointer ${
+                  hasCopiedLink
+                    ? 'bg-emerald-50 border-emerald-500 text-emerald-800'
+                    : 'bg-slate-100 hover:bg-slate-200 border-slate-200 text-slate-900 active:scale-98'
+                }`}
+              >
+                {hasCopiedLink ? <Check className="w-5 h-5 text-emerald-600 stroke-[3]" /> : <Copy className="w-5 h-5 text-slate-700" />}
+                <span>{hasCopiedLink ? 'Lien copié dans le presse-papier !' : 'Copier le lien'}</span>
+              </button>
+
+              {/* Partage natif si disponible */}
+              {typeof navigator !== 'undefined' && typeof navigator.share === 'function' && (
+                <button
+                  onClick={handleNativeShare}
+                  className="w-full py-2.5 px-4 rounded-2xl bg-slate-50 hover:bg-slate-100 text-slate-600 font-bold text-xs flex items-center justify-center gap-2 border border-slate-200 active:scale-98 transition-transform cursor-pointer"
+                >
+                  <Share2 className="w-4 h-4" />
+                  <span>Autres applications (Partage système)</span>
+                </button>
+              )}
+            </div>
+
+            <button
+              onClick={() => {
+                sounds.playClick();
+                setIsShareModalOpen(false);
+              }}
+              className="w-full py-2.5 text-xs font-extrabold text-slate-500 hover:text-slate-800 cursor-pointer"
+            >
+              Fermer
+            </button>
+          </div>
+        </div>
       )}
     </div>
   );

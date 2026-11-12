@@ -12,6 +12,9 @@ import {
   AlertTriangle,
   Lock,
   Navigation,
+  FileText,
+  HelpCircle,
+  Sparkles,
 } from 'lucide-react';
 import { Artisan, GeoCoordinates } from '../types';
 import { supabase } from '../utils/supabase';
@@ -52,6 +55,16 @@ export const ArtisanEditProfileModal: React.FC<ArtisanEditProfileModalProps> = (
   const [addressDetail, setAddressDetail] = useState(artisan.addressDetail || '');
   const [locality, setLocality] = useState(artisan.locality || '');
   const [secondPhone, setSecondPhone] = useState(artisan.secondPhone || '');
+  const [description, setDescription] = useState(
+    artisan.description || (artisan.bioVoiceText && !artisan.bioVoiceText.startsWith('TEL2:') ? artisan.bioVoiceText : '')
+  );
+  const [showInspirationModal, setShowInspirationModal] = useState(false);
+
+  const countWords = (text: string) => {
+    const trimmed = text.trim();
+    return trimmed ? trimmed.split(/\s+/).length : 0;
+  };
+
   const [coords, setCoords] = useState<GeoCoordinates | null>(
     artisan.lat !== null && artisan.lng !== null
       ? { lat: artisan.lat, lng: artisan.lng }
@@ -154,6 +167,12 @@ export const ArtisanEditProfileModal: React.FC<ArtisanEditProfileModalProps> = (
       return;
     }
 
+    const wordCount = countWords(description);
+    if (wordCount > 1500) {
+      alert(`La description contient ${wordCount} mots. La limite maximale est de 1500 mots.`);
+      return;
+    }
+
     setIsSaving(true);
     sounds.playClick();
 
@@ -172,6 +191,7 @@ export const ArtisanEditProfileModal: React.FC<ArtisanEditProfileModalProps> = (
           work_photos: workPhotos.slice(0, 5),
           address_detail: combinedAddress,
           second_phone: secondPhone.trim(),
+          description: description.trim(),
           lat: coords ? coords.lat : null,
           lng: coords ? coords.lng : null,
           last_profile_update: nowIso,
@@ -182,8 +202,13 @@ export const ArtisanEditProfileModal: React.FC<ArtisanEditProfileModalProps> = (
           .update(updatePayload)
           .eq('id', artisan.id);
 
-        // Fallback si la colonne 'second_phone' n'existe pas encore dans Supabase
-        if (error && (error.message.includes('second_phone') || error.message.includes('column') || error.message.includes('schema cache'))) {
+        // Fallback si la colonne 'description' ou 'second_phone' n'existe pas encore dans le schema Supabase
+        if (error && (error.message.includes('description') || error.message.includes('second_phone') || error.message.includes('column') || error.message.includes('schema cache'))) {
+          // Préservation sûre dans les colonnes standard
+          const fallbackBio = description.trim()
+            ? description.trim()
+            : (secondPhone.trim() ? `TEL2:${secondPhone.trim()}` : (artisan.bioVoiceText || null));
+
           const fallbackPayload: Record<string, any> = {
             avatar: avatar,
             cover_image: coverImage,
@@ -192,9 +217,11 @@ export const ArtisanEditProfileModal: React.FC<ArtisanEditProfileModalProps> = (
             lat: coords ? coords.lat : null,
             lng: coords ? coords.lng : null,
             last_profile_update: nowIso,
-            // Stocke la valeur du 2ème téléphone dans bio_voice_text (colonne réelle existante) pour ne JAMAIS la perdre
-            bio_voice_text: secondPhone.trim() ? `TEL2:${secondPhone.trim()}` : (artisan.bioVoiceText || null),
+            bio_voice_text: fallbackBio,
           };
+          if (secondPhone.trim()) {
+            fallbackPayload.second_phone = secondPhone.trim();
+          }
           const retryRes = await supabase
             .from('artisans')
             .update(fallbackPayload)
@@ -217,6 +244,7 @@ export const ArtisanEditProfileModal: React.FC<ArtisanEditProfileModalProps> = (
         addressDetail: addressDetail.trim(),
         locality: locality.trim(),
         secondPhone: secondPhone.trim(),
+        description: description.trim(),
         lat: coords ? coords.lat : null,
         lng: coords ? coords.lng : null,
         lastProfileUpdate: nowIso,
@@ -494,7 +522,46 @@ export const ArtisanEditProfileModal: React.FC<ArtisanEditProfileModalProps> = (
             />
           </div>
 
-          {/* 6. Coordonnées GPS réelles + Bouton Actualiser GPS */}
+          {/* 6. Description / Présentation */}
+          <div className="bg-slate-50 p-4 rounded-2xl border border-slate-200">
+            <div className="flex items-center justify-between mb-1.5 flex-wrap gap-2">
+              <label className="block text-xs font-black uppercase text-slate-800 flex items-center gap-1.5">
+                <FileText className="w-4 h-4 text-amber-600" />
+                <span>Description (Présentation de votre activité)</span>
+              </label>
+              <button
+                type="button"
+                onClick={() => {
+                  sounds.playClick();
+                  setShowInspirationModal(true);
+                }}
+                className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-amber-100 hover:bg-amber-200 text-amber-900 text-xs font-bold transition-colors cursor-pointer"
+                title="Voir un exemple inspirant"
+              >
+                <HelpCircle className="w-3.5 h-3.5 text-amber-700" />
+                <span>Voir un exemple</span>
+              </button>
+            </div>
+            <p className="text-[11px] text-slate-500 mb-2">
+              Présentez votre savoir-faire et vos services (optionnel, max 1500 mots). Ne bloque rien si vide.
+            </p>
+            <textarea
+              rows={4}
+              value={description}
+              onChange={(e) => setDescription(e.target.value)}
+              disabled={isLocked}
+              placeholder="Ex : Bonjour, je m'appelle ..., je suis menuisier à Lomé, j'ai 8 ans d'expérience..."
+              className="w-full px-3.5 py-2.5 rounded-xl border-2 border-slate-200 disabled:bg-slate-100 disabled:text-slate-500 focus:border-amber-500 text-sm font-medium text-slate-900 outline-none resize-y"
+            />
+            <div className="flex justify-between items-center mt-1 text-[11px] font-bold text-slate-500">
+              <span>Optionnel</span>
+              <span className={countWords(description) > 1500 ? 'text-rose-600 font-black' : ''}>
+                {countWords(description)} / 1500 mots
+              </span>
+            </div>
+          </div>
+
+          {/* 7. Coordonnées GPS réelles + Bouton Actualiser GPS */}
           <div className="bg-slate-50 p-4 rounded-2xl border border-slate-200">
             <div className="flex items-center justify-between mb-2">
               <div className="flex items-center gap-1.5">
@@ -536,6 +603,58 @@ export const ArtisanEditProfileModal: React.FC<ArtisanEditProfileModalProps> = (
             </span>
           </button>
         </form>
+
+        {/* Modal Exemple Inspirant */}
+        {showInspirationModal && (
+          <div className="fixed inset-0 z-60 bg-black/70 backdrop-blur-xs flex items-center justify-center p-4">
+            <div className="bg-white w-full max-w-md rounded-3xl p-5 sm:p-6 shadow-2xl border-2 border-amber-400 relative animate-in fade-in zoom-in-95 duration-150">
+              <button
+                type="button"
+                onClick={() => {
+                  sounds.playClick();
+                  setShowInspirationModal(false);
+                }}
+                className="absolute top-4 right-4 w-9 h-9 rounded-full bg-slate-100 hover:bg-slate-200 flex items-center justify-center text-slate-600"
+                aria-label="Fermer"
+              >
+                <X className="w-4 h-4" />
+              </button>
+
+              <div className="flex items-center gap-2 mb-3">
+                <div className="w-9 h-9 rounded-xl bg-amber-100 flex items-center justify-center text-amber-700">
+                  <Sparkles className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="text-base font-black text-slate-900">
+                    Exemple de présentation
+                  </h3>
+                  <p className="text-xs text-slate-500 font-semibold">
+                    Modèle simple pour inspirer vos clients
+                  </p>
+                </div>
+              </div>
+
+              <div className="p-4 rounded-2xl bg-amber-50 border border-amber-200 text-slate-800 text-sm leading-relaxed mb-4 font-medium">
+                « Bonjour, je m'appelle ..., je suis menuisier à Lomé, j'ai 8 ans d'expérience, je fabrique des meubles, portes, etc. Je travaille avec sérieux et je respecte les délais. Contactez-moi pour vos projets. »
+              </div>
+
+              <p className="text-xs text-slate-500 mb-5 italic text-center">
+                Conseil : Adaptez simplement avec votre prénom, votre ville, votre métier et vos réalisations.
+              </p>
+
+              <button
+                type="button"
+                onClick={() => {
+                  sounds.playClick();
+                  setShowInspirationModal(false);
+                }}
+                className="w-full py-3 rounded-xl bg-slate-900 hover:bg-slate-800 text-white font-extrabold text-sm shadow-sm active:scale-95 transition-transform cursor-pointer"
+              >
+                Fermer / Utiliser comme inspiration
+              </button>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );
