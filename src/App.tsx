@@ -24,6 +24,7 @@ import { AdminCustomTradesModal } from './components/AdminCustomTradesModal';
 import { ArtisanMap } from './components/ArtisanMap';
 import { AdminPage } from './components/AdminPage';
 import { IntroSplashAnimation } from './components/IntroSplashAnimation';
+import { OfflineIndicator } from './components/OfflineIndicator';
 import { speakAloud, sounds } from './utils/audio';
 import {
   requestDeviceCoordinates,
@@ -904,6 +905,7 @@ export default function App() {
           onSaveCustomTrade={handleSaveCustomTrade}
           initialCoords={userLocation}
         />
+        <OfflineIndicator />
       </>
     );
   }
@@ -1237,6 +1239,7 @@ export default function App() {
           </div>
         </div>
       </footer>
+      <OfflineIndicator />
     </div>
   );
 }

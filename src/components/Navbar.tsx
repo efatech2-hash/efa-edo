@@ -10,6 +10,7 @@ import {
 } from 'lucide-react';
 import { CurrentUser, UserRole } from '../types';
 import { speakAloud, sounds, isAudioMuted, toggleAudioMute } from '../utils/audio';
+import { PWAInstallButton } from './PWAInstallButton';
 
 interface NavbarProps {
   currentUser: CurrentUser;
@@ -207,6 +208,9 @@ export const Navbar: React.FC<NavbarProps> = ({
             )}
           </button>
 
+          {/* PWA Install Button (Desktop when installable) */}
+          <PWAInstallButton variant="navbar" />
+
           {/* Déconnexion */}
           {onLogout && (
             <button
@@ -249,6 +253,9 @@ export const Navbar: React.FC<NavbarProps> = ({
           >
             <Volume2 className="w-4 h-4" />
           </button>
+
+          {/* PWA Install Button (Mobile bar when installable) */}
+          <PWAInstallButton variant="navbar" />
 
           {/* Hamburger Menu Toggle Button */}
           <button
@@ -383,6 +390,12 @@ export const Navbar: React.FC<NavbarProps> = ({
             </div>
             <span className="text-[10px] text-amber-400 font-bold">Écouter</span>
           </button>
+
+          {/* PWA Install Button (Mobile drawer) */}
+          <PWAInstallButton
+            variant="mobile-menu"
+            onActionComplete={() => setIsMobileMenuOpen(false)}
+          />
 
           {/* Déconnexion Mobile */}
           {onLogout && (

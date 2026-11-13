@@ -27,6 +27,7 @@ import { TradeIcon } from './TradeIcon';
 import { ArtisanMap } from './ArtisanMap';
 import { speakAloud, startVoiceRecognition, sounds } from '../utils/audio';
 import { calculateHaversineDistanceKm, formatDistanceBadge } from '../utils/geo';
+import { AppDownloadSection } from './AppDownloadSection';
 
 interface HomeClientProps {
   artisans: Artisan[];
@@ -920,6 +921,9 @@ export const HomeClient: React.FC<HomeClientProps> = ({
           )}
         </section>
       )}
+
+      {/* Section Télécharger l'application EFA Edo */}
+      <AppDownloadSection />
 
       {/* Share Modal - WhatsApp, Facebook, Copier le lien, Partage natif */}
       {isShareModalOpen && (

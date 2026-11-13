@@ -25,6 +25,7 @@ import { TradeIcon } from './TradeIcon';
 import { speakAloud, sounds } from '../utils/audio';
 import { requestDeviceCoordinates } from '../utils/geo';
 import { supabase } from '../utils/supabase';
+import { AppDownloadSection } from './AppDownloadSection';
 
 export const COUNTRY_CODES = [
   { code: '+228', country: 'Togo', flag: '🇹🇬' },
@@ -740,6 +741,10 @@ export const Onboarding: React.FC<OnboardingProps> = ({
               </div>
               <ChevronRight className="w-8 h-8 text-slate-300 group-hover:text-amber-600 transition-colors shrink-0" />
             </button>
+          </div>
+
+          <div className="mb-6">
+            <AppDownloadSection />
           </div>
 
           <div className="text-center text-slate-500 text-sm font-medium">
